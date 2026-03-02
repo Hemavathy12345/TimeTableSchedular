@@ -1,0 +1,2532 @@
+{
+  "users": [
+    {
+      "id": "admin-001",
+      "name": "Admin User",
+      "email": "admin@college.edu",
+      "password": "$2a$10$Xbqvcu7qGKxXgqswLnFdbeRnBibdyVwQiQ4Y1L6jdpNCGhheu5t86",
+      "role": "admin",
+      "departmentId": null
+    },
+    {
+      "id": "faculty-001",
+      "name": "Dr. Sharma",
+      "email": "sharma@college.edu",
+      "password": "$2a$10$Xbqvcu7qGKxXgqswLnFdbeRnBibdyVwQiQ4Y1L6jdpNCGhheu5t86",
+      "role": "faculty",
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "student-001",
+      "name": "Rahul Kumar",
+      "email": "rahul@college.edu",
+      "password": "$2a$10$Xbqvcu7qGKxXgqswLnFdbeRnBibdyVwQiQ4Y1L6jdpNCGhheu5t86",
+      "role": "student",
+      "departmentId": "dept-001"
+    }
+  ],
+  "departments": [
+    {
+      "id": "dept-001",
+      "name": "Computer Science & Engineering",
+      "code": "CSE"
+    },
+    {
+      "id": "dept-002",
+      "name": "Electronics & Communication",
+      "code": "ECE"
+    },
+    {
+      "id": "dept-11857e25",
+      "name": "ELECTRIC & ELECTRONICS ",
+      "code": "EEE"
+    }
+  ],
+  "faculty": [
+    {
+      "id": "fac-ae8f9324",
+      "name": "Dr. R. Kumar",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Professor"
+    },
+    {
+      "id": "fac-e405105f",
+      "name": "Dr. S. Priya",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Professor"
+    },
+    {
+      "id": "fac-d2958943",
+      "name": "Dr. M. Anand",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-8b56b769",
+      "name": "Dr. L. Geetha",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-9cd7e18e",
+      "name": "Dr. V. Suresh",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-94844863",
+      "name": "Dr. K. Meena",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-d31c318b",
+      "name": "Mr. A. Rajesh",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-ec648864",
+      "name": "Ms. P. Divya",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-d1ea7d67",
+      "name": "Mr. N. Karthik",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-adebe2ea",
+      "name": "Ms. S. Lavanya",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-4d11bc4b",
+      "name": "Mr. R. Arun",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-7ffc2205",
+      "name": "Ms. J. Keerthana",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-72238121",
+      "name": "Mr. D. Prakash",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-e5fcc881",
+      "name": "Ms. M. Anitha",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-aec8eb77",
+      "name": "Mr. S. Vinoth",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-9d9fbb64",
+      "name": "Ms. T. Revathi",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-d8757536",
+      "name": "Mr. P. Naveen",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-98227d56",
+      "name": "Ms. K. Sandhya",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-60749e1b",
+      "name": "Mr. B. Vignesh",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-5bf303bb",
+      "name": "Ms. R. Aishwarya",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-cdb85eac",
+      "name": "Mr. G. Harish",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-8530177b",
+      "name": "Ms. S. Bhavya",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-375b1090",
+      "name": "Mr. K. Dinesh",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-8990545d",
+      "name": "Ms. R. Deepika",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-895da943",
+      "name": "Mr. A. Sriram",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-2d31dcc4",
+      "name": "Ms. P. Nandhini",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-c38318eb",
+      "name": "Mr. V. Lokesh",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-cd570017",
+      "name": "Ms. S. Janani",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-7d29312a",
+      "name": "Mr. M. Rahul",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-bc212df8",
+      "name": "Ms. K. Swetha",
+      "departmentId": "dept-001",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-37860eec",
+      "name": "Dr. P. Balaji",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Professor"
+    },
+    {
+      "id": "fac-f6f4f10c",
+      "name": "Dr. R. Shanthi",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Professor"
+    },
+    {
+      "id": "fac-9fefbd3b",
+      "name": "Dr. V. Murugan",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-3cb09066",
+      "name": "Dr. S. Kalaiyarasi",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-ba31ccdb",
+      "name": "Dr. K. Senthil",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-03205d3a",
+      "name": "Dr. J. Mala",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-059dcc2b",
+      "name": "Mr. A. Praveen",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-3dc02209",
+      "name": "Ms. S. Nithya",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-e6e1673e",
+      "name": "Mr. R. Kiran",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-d39c015a",
+      "name": "Ms. M. Pavithra",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-1d60f152",
+      "name": "Mr. T. Manikandan",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-799dd419",
+      "name": "Ms. P. Ramya",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-84bde954",
+      "name": "Mr. V. Saravanan",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-14f80e4a",
+      "name": "Ms. K. Dharani",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-a38c1201",
+      "name": "Mr. S. Ajith",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-fb7dd923",
+      "name": "Ms. L. Monisha",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-95f112f7",
+      "name": "Mr. D. Sathish",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-feb5d6a7",
+      "name": "Ms. R. Sneha",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-60bed638",
+      "name": "Mr. G. Ashok",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-d81c3915",
+      "name": "Ms. J. Harini",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-6d3b7da3",
+      "name": "Mr. P. Sanjay",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-c4ddaa5d",
+      "name": "Ms. B. Keerthi",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-aeae26c8",
+      "name": "Mr. K. Naveen",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-8531cb7a",
+      "name": "Ms. A. Soundarya",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-34e5507c",
+      "name": "Mr. S. Deepak",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-8290080e",
+      "name": "Ms. M. Priyanka",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-d01db9f0",
+      "name": "Mr. R. Pradeep",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-f58d90cf",
+      "name": "Ms. K. Vaishnavi",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-e7cfd240",
+      "name": "Mr. V. Arjun",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-e8951c63",
+      "name": "Ms. N. Akshaya",
+      "departmentId": "dept-002",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-00e6e163",
+      "name": "Dr. K. Ramesh",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Professor"
+    },
+    {
+      "id": "fac-cbcbc5c2",
+      "name": "Dr. S. Uma",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Professor"
+    },
+    {
+      "id": "fac-5b58e502",
+      "name": "Dr. V. Chandran",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-3312ea83",
+      "name": "Dr. P. Revathi",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-31517392",
+      "name": "Dr. M. Subramanian",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-0b3e8d7a",
+      "name": "Dr. L. Indira",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Associate Professor"
+    },
+    {
+      "id": "fac-555ba4ee",
+      "name": "Mr. A. Suresh",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-26d3b08c",
+      "name": "Ms. R. Kalpana",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-def57b97",
+      "name": "Mr. T. Balakrishnan",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-8b263213",
+      "name": "Ms. S. Mahalakshmi",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-2c4284f1",
+      "name": "Mr. P. Karthikeyan",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-cafacd1f",
+      "name": "Ms. D. Sowmya",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-3d219f3f",
+      "name": "Mr. G. Pravin",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-531fb8af",
+      "name": "Ms. K. Anusha",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-ea889787",
+      "name": "Mr. R. Nithish",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-b0bb4788",
+      "name": "Ms. J. Sharmila",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-b6926687",
+      "name": "Mr. V. Santhosh",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-d3920ad0",
+      "name": "Ms. P. Gayathri",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-e5a3a571",
+      "name": "Mr. A. Bharath",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-53b63853",
+      "name": "Ms. R. Keerthana",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-7cf940ea",
+      "name": "Mr. S. Surya",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-28a77bd0",
+      "name": "Ms. M. Kavitha",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-9820d7fb",
+      "name": "Mr. K. Rohith",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-e4b4f588",
+      "name": "Ms. N. Vaidehi",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-aa21fb1e",
+      "name": "Mr. D. Gokul",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-54240ad7",
+      "name": "Ms. T. Ranjitha",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-72e4b3fe",
+      "name": "Mr. P. Yashwanth",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-5e99100f",
+      "name": "Ms. L. Divya",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-e9559757",
+      "name": "Mr. S. Mohan",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    },
+    {
+      "id": "fac-7cbca752",
+      "name": "Ms. A. Ishwarya",
+      "departmentId": "dept-11857e25",
+      "email": "",
+      "designation": "Assistant Professor"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "room-001",
+      "name": "Room 101",
+      "type": "classroom",
+      "capacity": 60,
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "room-002",
+      "name": "Room 102",
+      "type": "classroom",
+      "capacity": 60,
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "room-003",
+      "name": "Room 201",
+      "type": "classroom",
+      "capacity": 60,
+      "departmentId": "dept-002"
+    },
+    {
+      "id": "room-004",
+      "name": "Room 202",
+      "type": "classroom",
+      "capacity": 60,
+      "departmentId": "dept-002"
+    },
+    {
+      "id": "room-005",
+      "name": "CS Lab 1",
+      "type": "lab",
+      "capacity": 30,
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "room-006",
+      "name": "CS Lab 2",
+      "type": "lab",
+      "capacity": 30,
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "room-007",
+      "name": "ECE Lab 1",
+      "type": "lab",
+      "capacity": 30,
+      "departmentId": "dept-002"
+    },
+    {
+      "id": "room-008",
+      "name": "ECE Lab 2",
+      "type": "lab",
+      "capacity": 30,
+      "departmentId": "dept-002"
+    }
+  ],
+  "subjects": [
+    {
+      "id": "sub-001",
+      "name": "Data Structures",
+      "code": "CS201",
+      "type": "theory",
+      "weeklyFrequency": 4,
+      "year": 2,
+      "departmentId": "dept-001",
+      "duration": 1
+    },
+    {
+      "id": "sub-002",
+      "name": "Operating Systems",
+      "code": "CS301",
+      "type": "theory",
+      "weeklyFrequency": 3,
+      "year": 3,
+      "departmentId": "dept-001",
+      "duration": 1
+    },
+    {
+      "id": "sub-003",
+      "name": "DBMS",
+      "code": "CS202",
+      "type": "theory",
+      "weeklyFrequency": 3,
+      "year": 2,
+      "departmentId": "dept-001",
+      "duration": 1
+    },
+    {
+      "id": "sub-004",
+      "name": "DS Lab",
+      "code": "CS211",
+      "type": "lab",
+      "weeklyFrequency": 1,
+      "year": 2,
+      "departmentId": "dept-001",
+      "duration": 2
+    },
+    {
+      "id": "sub-005",
+      "name": "DBMS Lab",
+      "code": "CS212",
+      "type": "lab",
+      "weeklyFrequency": 1,
+      "year": 2,
+      "departmentId": "dept-001",
+      "duration": 2
+    },
+    {
+      "id": "sub-006",
+      "name": "Computer Networks",
+      "code": "CS302",
+      "type": "theory",
+      "weeklyFrequency": 3,
+      "year": 3,
+      "departmentId": "dept-001",
+      "duration": 1
+    },
+    {
+      "id": "sub-007",
+      "name": "Digital Electronics",
+      "code": "EC201",
+      "type": "theory",
+      "weeklyFrequency": 4,
+      "year": 2,
+      "departmentId": "dept-002",
+      "duration": 1
+    },
+    {
+      "id": "sub-008",
+      "name": "Signal Processing",
+      "code": "EC301",
+      "type": "theory",
+      "weeklyFrequency": 3,
+      "year": 3,
+      "departmentId": "dept-002",
+      "duration": 1
+    },
+    {
+      "id": "sub-009",
+      "name": "DE Lab",
+      "code": "EC211",
+      "type": "lab",
+      "weeklyFrequency": 1,
+      "year": 2,
+      "departmentId": "dept-002",
+      "duration": 2
+    },
+    {
+      "id": "sub-010",
+      "name": "Microprocessors",
+      "code": "EC202",
+      "type": "theory",
+      "weeklyFrequency": 3,
+      "year": 2,
+      "departmentId": "dept-002",
+      "duration": 1
+    }
+  ],
+  "classes": [
+    {
+      "id": "cls-001",
+      "name": "CSE 2nd Year A",
+      "year": 2,
+      "section": "A",
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "cls-002",
+      "name": "CSE 2nd Year B",
+      "year": 2,
+      "section": "B",
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "cls-003",
+      "name": "CSE 3rd Year A",
+      "year": 3,
+      "section": "A",
+      "departmentId": "dept-001"
+    },
+    {
+      "id": "cls-004",
+      "name": "ECE 2nd Year A",
+      "year": 2,
+      "section": "A",
+      "departmentId": "dept-002"
+    },
+    {
+      "id": "cls-005",
+      "name": "ECE 3rd Year A",
+      "year": 3,
+      "section": "A",
+      "departmentId": "dept-002"
+    }
+  ],
+  "timeSlotConfigs": [
+    {
+      "id": "ts-001",
+      "year": 1,
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday"
+      ],
+      "slots": [
+        {
+          "start": "08:00",
+          "end": "08:50",
+          "type": "class"
+        },
+        {
+          "start": "08:50",
+          "end": "09:40",
+          "type": "class"
+        },
+        {
+          "start": "09:40",
+          "end": "09:55",
+          "type": "break"
+        },
+        {
+          "start": "09:55",
+          "end": "10:45",
+          "type": "class"
+        },
+        {
+          "start": "10:45",
+          "end": "11:35",
+          "type": "class"
+        },
+        {
+          "start": "11:35",
+          "end": "12:25",
+          "type": "class"
+        },
+        {
+          "start": "12:25",
+          "end": "13:10",
+          "type": "lunch"
+        },
+        {
+          "start": "13:10",
+          "end": "14:00",
+          "type": "class"
+        },
+        {
+          "start": "14:00",
+          "end": "14:50",
+          "type": "class"
+        }
+      ]
+    },
+    {
+      "id": "ts-002",
+      "year": 2,
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday"
+      ],
+      "slots": [
+        {
+          "start": "09:00",
+          "end": "09:50",
+          "type": "class"
+        },
+        {
+          "start": "09:50",
+          "end": "10:40",
+          "type": "class"
+        },
+        {
+          "start": "10:40",
+          "end": "10:55",
+          "type": "break"
+        },
+        {
+          "start": "10:55",
+          "end": "11:45",
+          "type": "class"
+        },
+        {
+          "start": "11:45",
+          "end": "12:35",
+          "type": "class"
+        },
+        {
+          "start": "12:35",
+          "end": "13:20",
+          "type": "lunch"
+        },
+        {
+          "start": "13:20",
+          "end": "14:10",
+          "type": "class"
+        },
+        {
+          "start": "14:10",
+          "end": "15:00",
+          "type": "class"
+        },
+        {
+          "start": "15:00",
+          "end": "15:50",
+          "type": "class"
+        }
+      ]
+    },
+    {
+      "id": "ts-003",
+      "year": 3,
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday"
+      ],
+      "slots": [
+        {
+          "start": "09:30",
+          "end": "10:20",
+          "type": "class"
+        },
+        {
+          "start": "10:20",
+          "end": "11:10",
+          "type": "class"
+        },
+        {
+          "start": "11:10",
+          "end": "11:25",
+          "type": "break"
+        },
+        {
+          "start": "11:25",
+          "end": "12:15",
+          "type": "class"
+        },
+        {
+          "start": "12:15",
+          "end": "13:05",
+          "type": "class"
+        },
+        {
+          "start": "13:05",
+          "end": "13:50",
+          "type": "lunch"
+        },
+        {
+          "start": "13:50",
+          "end": "14:40",
+          "type": "class"
+        },
+        {
+          "start": "14:40",
+          "end": "15:30",
+          "type": "class"
+        }
+      ]
+    },
+    {
+      "id": "ts-004",
+      "year": 4,
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday"
+      ],
+      "slots": [
+        {
+          "start": "10:00",
+          "end": "10:50",
+          "type": "class"
+        },
+        {
+          "start": "10:50",
+          "end": "11:40",
+          "type": "class"
+        },
+        {
+          "start": "11:40",
+          "end": "11:55",
+          "type": "break"
+        },
+        {
+          "start": "11:55",
+          "end": "12:45",
+          "type": "class"
+        },
+        {
+          "start": "12:45",
+          "end": "13:30",
+          "type": "lunch"
+        },
+        {
+          "start": "13:30",
+          "end": "14:20",
+          "type": "class"
+        },
+        {
+          "start": "14:20",
+          "end": "15:10",
+          "type": "class"
+        }
+      ]
+    }
+  ],
+  "defaultClasses": [],
+  "timetables": [
+    {
+      "id": "tt-3cc087bd",
+      "name": "SEM6",
+      "description": "FOR COLLEGE",
+      "generatedAt": "2026-02-15T15:43:58.819Z",
+      "entries": [
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-004",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-001",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-005",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": true,
+          "labFaculty2Id": "fac-002",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-004",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": true,
+          "labFaculty2Id": "fac-001",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-005",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Tuesday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-002",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-009",
+          "facultyId": "fac-008",
+          "roomId": "room-007",
+          "day": "Monday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-005",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-003",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-003",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Thursday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-003",
+          "day": "Monday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-004",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-004",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-003",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Friday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 4,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 7,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        }
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "tt-93a27169",
+      "name": "SEM6",
+      "description": "nothing",
+      "generatedAt": "2026-02-17T07:16:38.834Z",
+      "entries": [
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-004",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-001",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-005",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": true,
+          "labFaculty2Id": "fac-002",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-004",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": true,
+          "labFaculty2Id": "fac-001",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-005",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Tuesday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-002",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-009",
+          "facultyId": "fac-008",
+          "roomId": "room-007",
+          "day": "Monday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-005",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-004",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-005",
+          "day": "Tuesday",
+          "slotIndex": 3,
+          "isLab": true,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-004",
+          "facultyId": "fac-4f99ea55",
+          "roomId": "room-006",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": true,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-001",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-001",
+          "day": "Friday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-003",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-003",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Thursday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-003",
+          "day": "Monday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-004",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-004",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-003",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Friday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 4,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 7,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        }
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "tt-1cfdc421",
+      "name": "sem7",
+      "description": "",
+      "generatedAt": "2026-02-18T03:39:31.810Z",
+      "entries": [
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-004",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-001",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-005",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": true,
+          "labFaculty2Id": "fac-002",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-004",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": true,
+          "labFaculty2Id": "fac-001",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-005",
+          "facultyId": "fac-004",
+          "roomId": "room-005",
+          "day": "Tuesday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-002",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-009",
+          "facultyId": "fac-008",
+          "roomId": "room-007",
+          "day": "Monday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": "fac-005",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-004",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-005",
+          "day": "Tuesday",
+          "slotIndex": 3,
+          "isLab": true,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-004",
+          "facultyId": "fac-4f99ea55",
+          "roomId": "room-006",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": true,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-004",
+          "facultyId": "fac-72238121",
+          "roomId": "room-005",
+          "day": "Wednesday",
+          "slotIndex": 7,
+          "isLab": true,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-003",
+          "facultyId": "fac-002",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-006",
+          "facultyId": "fac-003",
+          "roomId": "room-002",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-010",
+          "facultyId": "fac-006",
+          "roomId": "room-003",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Monday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Tuesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-005",
+          "subjectId": "sub-008",
+          "facultyId": "fac-007",
+          "roomId": "room-004",
+          "day": "Wednesday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-001",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-001",
+          "day": "Friday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-003",
+          "subjectId": "sub-002",
+          "facultyId": "fac-91685d2e",
+          "roomId": "room-001",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": "fac-8f86f45f",
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-003",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-003",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Monday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 6,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Wednesday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-002",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Thursday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-003",
+          "day": "Monday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-004",
+          "day": "Tuesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-004",
+          "day": "Wednesday",
+          "slotIndex": 1,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-004",
+          "subjectId": "sub-007",
+          "facultyId": "fac-005",
+          "roomId": "room-003",
+          "day": "Thursday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-002",
+          "day": "Friday",
+          "slotIndex": 0,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 3,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 4,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        },
+        {
+          "classId": "cls-001",
+          "subjectId": "sub-001",
+          "facultyId": "fac-001",
+          "roomId": "room-001",
+          "day": "Tuesday",
+          "slotIndex": 7,
+          "isLab": false,
+          "labFaculty2Id": null,
+          "isFixed": false
+        }
+      ],
+      "conflicts": []
+    }
+  ],
+  "facultySubjectMapping": []
+}

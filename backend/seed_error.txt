@@ -1,0 +1,26 @@
+﻿Γ£à Connected to MongoDB: mongodb://localhost:27017/timetable_db
+Clearing old data...
+node : Γ¥î Error seeding 
+data: ReferenceError: 
+Timetable is not defined
+At line:1 char:1
++ node setup.js 2>&1 | 
+Out-File -FilePath 
+seed_error.txt -Encoding 
+utf8
++ ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (Γ¥î  
+   Error seedi... is not   
+  defined:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+    at seed (file:///D:/SCH
+EDULE/backend/setup.js:156:
+13)
+    at process.processTicks
+AndRejections (node:interna
+l/process/task_queues:105:5
+)

@@ -1,0 +1,9 @@
+export { default as User } from './User.js';
+export { default as Department } from './Department.js';
+export { default as Faculty } from './Faculty.js';
+export { default as Room } from './Room.js';
+export { default as Subject } from './Subject.js';
+export { default as Class } from './Class.js';
+export { default as TimeSlotConfig } from './TimeSlotConfig.js';
+export { default as Timetable } from './Timetable.js';
+export { default as FacultySubjectMapping } from './FacultySubjectMapping.js';
