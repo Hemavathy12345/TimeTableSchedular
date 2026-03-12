@@ -27,7 +27,7 @@ export default function TimetableList() {
         <div className="fade-in">
             <div className="table-header">
                 <div>
-                    <h1 className="page-title">📅 Generated Timetables</h1>
+                    <h1 className="page-title">Generated Timetables</h1>
                     <p className="page-subtitle">View and manage generated timetables</p>
                 </div>
                 <a href="/generate" className="btn btn-primary">⚡ Generate New</a>
@@ -35,7 +35,7 @@ export default function TimetableList() {
 
             {timetables.length === 0 ? (
                 <div className="empty-state">
-                    <div className="empty-state-icon">📅</div>
+                    <div className="empty-state-icon"></div>
                     <h3>No timetables yet</h3>
                     <p>Use the Generation Wizard to create your first timetable.</p>
                 </div>

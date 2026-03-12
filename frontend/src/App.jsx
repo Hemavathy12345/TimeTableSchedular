@@ -12,6 +12,7 @@ import TimeSlots from './pages/TimeSlots';
 import GenerateWizard from './pages/GenerateWizard';
 import TimetableList from './pages/TimetableList';
 import TimetableView from './pages/TimetableView';
+import FacultyOverview from './pages/FacultyOverview';
 
 function ProtectedRoute({ children, roles }) {
     const { user, loading } = useAuth();
@@ -52,6 +53,7 @@ function AppRoutes() {
                 <Route path="/generate" element={<ProtectedRoute roles={['admin']}><GenerateWizard /></ProtectedRoute>} />
                 <Route path="/timetables" element={<ProtectedRoute><TimetableList /></ProtectedRoute>} />
                 <Route path="/timetable/:id" element={<ProtectedRoute><TimetableView /></ProtectedRoute>} />
+                <Route path="/timetable/:id/faculty-overview" element={<ProtectedRoute><FacultyOverview /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/dashboard" />} />
             </Routes>
         </AppLayout>

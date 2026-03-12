@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast, ToastContainer } from '../components/Toast';
@@ -7,35 +7,56 @@ import { exportClassPDF, exportFacultyPDF } from '../utils/pdfExport';
 
 export default function TimetableView() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { user } = useAuth();
     const { toasts, addToast, removeToast } = useToast();
 
     const [timetable, setTimetable] = useState(null);
     const [classes, setClasses] = useState([]);
     const [faculty, setFaculty] = useState([]);
-    const [viewMode, setViewMode] = useState('class'); // 'class' | 'faculty'
+    const [subjects, setSubjects] = useState([]); // Added
+    const [rooms, setRooms] = useState([]);       // Added
+    const [viewMode, setViewMode] = useState('class'); // 'class' | 'faculty' | 'summary'
     const [selectedId, setSelectedId] = useState('');
     const [viewData, setViewData] = useState(null);
+    const [allocationSummary, setAllocationSummary] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);     // Added
     const [swapMode, setSwapMode] = useState(false);
     const [swapFirst, setSwapFirst] = useState(null);
 
     useEffect(() => { loadBase(); }, [id]);
 
     const loadBase = async () => {
-        const [tt, cls, fac] = await Promise.all([
-            api.get(`/timetable/${id}`),
-            api.get('/classes'),
-            api.get('/faculty')
-        ]);
-        setTimetable(tt.data);
-        setClasses(cls.data);
-        setFaculty(fac.data);
-        setLoading(false);
-
-        // Auto-select first class
-        if (cls.data.length > 0) {
-            setSelectedId(cls.data[0].id);
+        try {
+            const [ttRes, clsRes, facRes, subRes, roomRes] = await Promise.all([
+                api.get(`/timetable/${id}`),
+                api.get('/classes'),
+                api.get('/faculty'),
+                api.get('/subjects'),
+                api.get('/rooms')
+            ]);
+            setTimetable(ttRes.data);
+            setClasses(clsRes.data);
+            setFaculty(facRes.data);
+            setSubjects(subRes.data);
+            setRooms(roomRes.data);
+            
+            // Auto-select first class if nothing selected
+            if (clsRes.data.length > 0 && !selectedId) {
+                setSelectedId(clsRes.data[0].id);
+            }
+            
+            // Load allocation summary
+            try {
+                const sumRes = await api.get(`/timetable/${id}/allocation-summary`);
+                setAllocationSummary(sumRes.data);
+            } catch (e) { /* summary optional */ }
+            
+            setLoading(false);
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to load timetable base data');
+            setLoading(false);
         }
     };
 
@@ -56,6 +77,7 @@ export default function TimetableView() {
     };
 
     const switchView = (mode) => {
+        if (mode === viewMode) return;
         setViewMode(mode);
         if (mode === 'class' && classes.length > 0) {
             setSelectedId(classes[0].id);
@@ -182,12 +204,28 @@ export default function TimetableView() {
                                         }
 
                                         const entry = cellEntries[0];
+                                        // Activity slot styling
+                                        if (entry.isActivity) {
+                                            return (
+                                                <td key={day}>
+                                                    <div className="timetable-slot" style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', cursor: 'default' }}
+                                                        title={`Fixed Activity: ${entry.activityLabel}`}>
+                                                        <div className="slot-subject" style={{ fontSize: 11, color: '#15803d' }}>📌 {entry.activityLabel}</div>
+                                                    </div>
+                                                </td>
+                                            );
+                                        }
                                         return (
                                             <td key={day}>
                                                 <div
                                                     className={`timetable-slot ${entry.isLab ? 'lab' : 'theory'} ${swapMode && swapFirst === entry._idx ? 'swap-highlight' : ''}`}
                                                     onClick={() => handleSlotClick(entry, entry._idx)}
-                                                    title={`${entry.subjectName} (${entry.subjectCode})\nFaculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}\nRoom: ${entry.roomName}`}
+                                                    title={[
+                                                        `${entry.subjectName} (${entry.subjectCode})`,
+                                                        `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
+                                                        `Room: ${entry.roomName}`,
+                                                        entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
+                                                    ].filter(Boolean).join('\n')}
                                                 >
                                                     <div className="slot-subject">{entry.subjectCode || entry.subjectName}</div>
                                                     <div className="slot-faculty">
@@ -214,7 +252,7 @@ export default function TimetableView() {
 
             <div className="table-header">
                 <div>
-                    <h1 className="page-title">📅 {timetable?.name}</h1>
+                    <h1 className="page-title">{timetable?.name}</h1>
                     <p className="page-subtitle">{timetable?.description || 'Generated timetable view'}</p>
                 </div>
                 <div className="btn-group">
@@ -223,10 +261,17 @@ export default function TimetableView() {
                             className={`btn ${swapMode ? 'btn-danger' : 'btn-secondary'}`}
                             onClick={() => { setSwapMode(!swapMode); setSwapFirst(null); }}
                         >
-                            {swapMode ? '✕ Cancel Swap' : '🔄 Swap Slots'}
+                            {swapMode ? '✕ Cancel Swap' : 'Swap Slots'}
                         </button>
                     )}
-                    <button className="btn btn-primary" onClick={handleExportPDF}>📄 Export PDF</button>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => navigate(`/timetable/${id}/faculty-overview`)}
+                        title="View all faculty schedules and detect overlaps"
+                    >
+                        👥 Faculty Overview
+                    </button>
+                    <button className="btn btn-primary" onClick={handleExportPDF}>Export PDF</button>
                 </div>
             </div>
 
@@ -234,28 +279,86 @@ export default function TimetableView() {
             <div style={{ display: 'flex', gap: 16, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div className="view-toggle">
                     <button className={`view-toggle-btn ${viewMode === 'class' ? 'active' : ''}`} onClick={() => switchView('class')}>
-                        🎓 Class View
+                        Class View
                     </button>
                     <button className={`view-toggle-btn ${viewMode === 'faculty' ? 'active' : ''}`} onClick={() => switchView('faculty')}>
-                        👨‍🏫 Faculty View
+                        Faculty View
+                    </button>
+                    <button className={`view-toggle-btn ${viewMode === 'summary' ? 'active' : ''}`} onClick={() => switchView('summary')}
+                        style={{ borderLeft: '2px solid var(--border-color)' }}>
+                        Allocation Summary
                     </button>
                 </div>
 
-                <select className="form-select" style={{ width: 250 }} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
-                    {viewMode === 'class'
-                        ? classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-                        : faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
-                    }
-                </select>
+                {viewMode !== 'summary' && (
+                    <select className="form-select" style={{ width: 250 }} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+                        {viewMode === 'class'
+                            ? classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                            : faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
+                        }
+                    </select>
+                )}
             </div>
 
             {swapMode && (
                 <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: 'var(--radius-md)', fontSize: 13 }}>
-                    🔄 <strong>Swap Mode:</strong> {swapFirst !== null ? 'Now click the second slot to swap with.' : 'Click on the first slot you want to swap.'}
+                    <strong>Swap Mode:</strong> {swapFirst !== null ? 'Now click the second slot to swap with.' : 'Click on the first slot you want to swap.'}
                 </div>
             )}
 
-            {renderGrid()}
+            {viewMode === 'summary' ? (
+                <div>
+                    {allocationSummary ? (
+                        <>
+                            {/* Totals bar */}
+                            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+                                {[
+                                    { label: 'Total Allocated', value: allocationSummary.totals?.totalAllocated, color: '#6366f1' },
+                                    { label: 'Subject Periods', value: allocationSummary.totals?.subjectPeriods, color: '#0ea5e9' },
+                                    { label: 'Fixed Activities', value: allocationSummary.totals?.fixedPeriods, color: '#22c55e' },
+                                    { label: 'Remaining / 42', value: allocationSummary.totals?.remaining, color: allocationSummary.totals?.remaining < 0 ? '#ef4444' : '#f59e0b' },
+                                ].map(stat => (
+                                    <div key={stat.label} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '16px 22px', minWidth: 140, boxShadow: 'var(--shadow-sm)' }}>
+                                        <div style={{ fontSize: 28, fontWeight: 700, color: stat.color }}>{stat.value ?? '—'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{stat.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="data-table-wrapper">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Course Title</th>
+                                            <th>Course Code</th>
+                                            <th>Credits</th>
+                                            <th>Allocated Periods/Week</th>
+                                            <th>Scheduling Notes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {allocationSummary.summary?.map((row, i) => (
+                                            <tr key={i}>
+                                                <td style={{ fontWeight: 600 }}>{row.courseTitle}</td>
+                                                <td><code style={{ fontSize: 12 }}>{row.courseCode}</code></td>
+                                                <td style={{ textAlign: 'center' }}>{row.credits > 0 ? row.credits : '—'}</td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <span style={{ background: '#ede9fe', color: '#6d28d9', padding: '2px 10px', borderRadius: 12, fontWeight: 600, fontSize: 13 }}>{row.allocatedPeriods}</span>
+                                                </td>
+                                                <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 300 }}>{row.schedulingNote}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="empty-state"><p>No allocation summary available. Generate a timetable first.</p></div>
+                    )}
+                </div>
+            ) : (
+                <>{renderGrid()}</>
+            )}
 
             {/* Conflicts */}
             {timetable?.conflicts?.length > 0 && (

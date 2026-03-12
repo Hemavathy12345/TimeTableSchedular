@@ -29,8 +29,8 @@ export default function Login() {
         <div className="login-page">
             <div className="login-card slide-in">
                 <div className="login-logo">
-                    <div className="login-logo-icon">📅</div>
-                    <h1>ChronoTable</h1>
+                    <div className="login-logo-icon"></div>
+                    <h1>Planora</h1>
                     <p>Smart College Timetable System</p>
                 </div>
 
@@ -62,7 +62,7 @@ export default function Login() {
                     </div>
 
                     <button type="submit" className="btn btn-primary login-btn" disabled={loading}>
-                        {loading ? '⏳ Signing in...' : '→ Sign In'}
+                        {loading ? 'Signing in...' : '→ Sign In'}
                     </button>
                 </form>
 
@@ -70,17 +70,17 @@ export default function Login() {
                     <div className="login-demo-title">Quick Demo Access</div>
                     <div className="demo-credentials">
                         <div className="demo-cred" onClick={() => demoLogin('admin@college.edu')}>
-                            <span className="demo-cred-role">👑 Admin</span>
+                            <span className="demo-cred-role"> Admin</span>
                             <span className="demo-cred-email">admin@college.edu</span>
                         </div>
                         <div className="demo-cred" onClick={() => demoLogin('sharma@college.edu')}>
-                            <span className="demo-cred-role">👨‍🏫 Faculty</span>
+                            <span className="demo-cred-role">Faculty</span>
                             <span className="demo-cred-email">sharma@college.edu</span>
                         </div>
-                        <div className="demo-cred" onClick={() => demoLogin('rahul@college.edu')}>
+                        {/* <div className="demo-cred" onClick={() => demoLogin('rahul@college.edu')}>
                             <span className="demo-cred-role">🎓 Student</span>
                             <span className="demo-cred-email">rahul@college.edu</span>
-                        </div>
+                        </div> */}
                     </div>
                 </div>
             </div>

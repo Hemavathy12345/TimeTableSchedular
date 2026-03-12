@@ -4,11 +4,11 @@ import api from '../utils/api';
 import { useToast, ToastContainer } from '../components/Toast';
 
 const STEPS = [
-    { label: 'Basic Info', icon: '📝' },
-    { label: 'Schedule Config', icon: '⏰' },
-    { label: 'Data Mapping', icon: '🔗' },
-    { label: 'Faculty Mapping', icon: '👨‍🏫' },
-    { label: 'Review & Generate', icon: '⚡' },
+    { label: 'Basic Info' },
+    { label: 'Schedule Config'},
+    { label: 'Data Mapping'},
+    { label: 'Faculty Mapping' },
+    { label: 'Review & Generate' },
 ];
 
 export default function GenerateWizard() {
@@ -30,10 +30,11 @@ export default function GenerateWizard() {
     const [ttName, setTtName] = useState('');
     const [ttDesc, setTtDesc] = useState('');
     const [selectedClasses, setSelectedClasses] = useState([]);
-    const [selectedMappings, setSelectedMappings] = useState([]);
-
-    // New mapping form
-    const [newMapping, setNewMapping] = useState({ facultyId: '', subjectId: '', classId: '', labFaculty2Id: '' });
+    
+    // Faculty Mapping state
+    const [activeClassId, setActiveClassId] = useState(null);
+    const [classMappings, setClassMappings] = useState({}); // { classId: { subjectId: { facultyId, labFaculty2Id } } }
+    const [savingMappings, setSavingMappings] = useState(false);
 
     useEffect(() => { loadAll(); }, []);
 
@@ -45,36 +46,69 @@ export default function GenerateWizard() {
         ]);
         setDepartments(d.data); setFaculty(f.data); setSubjects(s.data);
         setClasses(c.data); setRooms(r.data); setTimeSlotConfigs(ts.data);
+        
+        // Initialize mapping state from DB
+        const initialMappings = {};
+        m.data.forEach(mapping => {
+            if (!initialMappings[mapping.classId]) initialMappings[mapping.classId] = {};
+            initialMappings[mapping.classId][mapping.subjectId] = {
+                facultyId: mapping.facultyId,
+                labFaculty2Id: mapping.labFaculty2Id || ''
+            };
+        });
+        setClassMappings(initialMappings);
         setMappings(m.data);
+        
         setSelectedClasses(c.data.map(cl => cl.id));
-        setSelectedMappings(m.data.map(mp => mp.id));
+        if (c.data.length > 0) setActiveClassId(c.data[0].id);
     };
 
     const toggleClass = (id) => {
         setSelectedClasses(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-    };
-
-    const toggleMapping = (id) => {
-        setSelectedMappings(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-    };
-
-    const addMapping = async () => {
-        if (!newMapping.facultyId || !newMapping.subjectId || !newMapping.classId) {
-            addToast('Please select faculty, subject, and class', 'error');
-            return;
+        // Also update activeClassId if it's the first one being toggled
+        if (!selectedClasses.includes(id) && !activeClassId) {
+            setActiveClassId(id);
         }
-        try {
-            await api.post('/timetable/mappings', newMapping);
-            addToast('Mapping added');
-            setNewMapping({ facultyId: '', subjectId: '', classId: '', labFaculty2Id: '' });
-            loadAll();
-        } catch (err) { addToast(err.response?.data?.error || 'Error', 'error'); }
     };
 
-    const deleteMapping = async (id) => {
-        await api.delete(`/timetable/mappings/${id}`);
-        addToast('Mapping removed');
-        loadAll();
+    const handleMappingChange = (classId, subjectId, field, value) => {
+        setClassMappings(prev => {
+            const currentClassMap = prev[classId] || {};
+            const currentSubMap = currentClassMap[subjectId] || { facultyId: '', labFaculty2Id: '' };
+            return {
+                ...prev,
+                [classId]: {
+                    ...currentClassMap,
+                    [subjectId]: { ...currentSubMap, [field]: value }
+                }
+            };
+        });
+    };
+
+    const saveClassMappings = async (classId) => {
+        setSavingMappings(true);
+        try {
+            const mappingsObj = classMappings[classId] || {};
+            // Convert to array and filter out incomplete
+            const payload = Object.entries(mappingsObj)
+                .map(([subjectId, fields]) => ({
+                    subjectId,
+                    facultyId: fields.facultyId,
+                    labFaculty2Id: fields.labFaculty2Id || null
+                }))
+                .filter(m => m.facultyId);
+
+            await api.put(`/timetable/mappings/class/${classId}`, { mappings: payload });
+            addToast('Class mappings saved successfully', 'success');
+            
+            // Reload all mappings occasionally to keep sync
+            const m = await api.get('/timetable/mappings/all');
+            setMappings(m.data);
+        } catch (err) {
+            addToast(err.response?.data?.error || 'Failed to save mappings', 'error');
+        } finally {
+            setSavingMappings(false);
+        }
     };
 
     const generate = async () => {
@@ -84,8 +118,8 @@ export default function GenerateWizard() {
             const res = await api.post('/timetable/generate', {
                 name: ttName,
                 description: ttDesc,
-                selectedClassIds: selectedClasses,
-                selectedMappingIds: selectedMappings
+                selectedClassIds: selectedClasses
+                // The backend generator now reads from the bulk-saved mappings directly
             });
             addToast('Timetable generated successfully!');
             setTimeout(() => navigate(`/timetable/${res.data.id}`), 1000);
@@ -102,7 +136,7 @@ export default function GenerateWizard() {
             case 0: // Basic Info
                 return (
                     <div>
-                        <h2 className="wizard-card-title">📝 Basic Information</h2>
+                        <h2 className="wizard-card-title">Basic Information</h2>
                         <p className="wizard-card-description">Enter a name and description for this timetable generation.</p>
                         <div className="form-group">
                             <label className="form-label">Timetable Name *</label>
@@ -120,7 +154,7 @@ export default function GenerateWizard() {
             case 1: // Schedule Config
                 return (
                     <div>
-                        <h2 className="wizard-card-title">⏰ Schedule Configuration</h2>
+                        <h2 className="wizard-card-title">Schedule Configuration</h2>
                         <p className="wizard-card-description">Review the staggered time slot configurations for each year.</p>
                         {timeSlotConfigs.sort((a, b) => a.year - b.year).map(config => (
                             <div key={config.id} className="card" style={{ marginBottom: 16, padding: 16 }}>
@@ -141,7 +175,7 @@ export default function GenerateWizard() {
             case 2: // Data Mapping - Select Classes
                 return (
                     <div>
-                        <h2 className="wizard-card-title">🔗 Select Classes</h2>
+                        <h2 className="wizard-card-title">Select Classes</h2>
                         <p className="wizard-card-description">Choose which classes to include in this timetable generation.</p>
                         <div style={{ marginBottom: 12 }}>
                             <button className="btn btn-sm btn-secondary" onClick={() => setSelectedClasses(classes.map(c => c.id))}>Select All</button>
@@ -164,75 +198,119 @@ export default function GenerateWizard() {
             case 3: // Faculty-Subject Mapping
                 return (
                     <div>
-                        <h2 className="wizard-card-title">👨‍🏫 Faculty-Subject Mapping</h2>
-                        <p className="wizard-card-description">Review and manage which faculty teaches which subject for each class. Select which mappings to include.</p>
+                        <h2 className="wizard-card-title">Faculty-Subject Mapping</h2>
+                        <p className="wizard-card-description">Select a class on the left to map its faculty. Ensure all subjects are covered.</p>
 
-                        <div className="card" style={{ marginBottom: 20, padding: 16 }}>
-                            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Add New Mapping</h3>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Faculty</label>
-                                    <select className="form-select" value={newMapping.facultyId} onChange={e => setNewMapping({ ...newMapping, facultyId: e.target.value })}>
-                                        <option value="">Select Faculty</option>
-                                        {faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                    </select>
+                        <div style={{ display: 'flex', gap: 20, marginTop: 16 }}>
+                            {/* Left Sidebar: Selected Classes */}
+                            <div style={{ width: '30%', minWidth: 220, background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden' }}>
+                                <div style={{ padding: '12px 14px', background: '#f8fafc', borderBottom: '1px solid var(--border-color)', fontWeight: 600, fontSize: 13 }}>
+                                    Target Classes ({selectedClasses.length})
                                 </div>
-                                <div className="form-group">
-                                    <label className="form-label">Subject</label>
-                                    <select className="form-select" value={newMapping.subjectId} onChange={e => setNewMapping({ ...newMapping, subjectId: e.target.value })}>
-                                        <option value="">Select Subject</option>
-                                        {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
-                                    </select>
+                                <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+                                    {selectedClasses.length === 0 ? (
+                                        <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No classes selected</div>
+                                    ) : (
+                                        selectedClasses.map(cId => {
+                                            const cls = classes.find(c => c.id === cId);
+                                            if (!cls) return null;
+                                            const isActive = activeClassId === cId;
+                                            
+                                            // Check mapping completion
+                                            const clsSubjects = subjects.filter(s => s.year === cls.year && (!s.departmentId || s.departmentId === cls.departmentId));
+                                            const mappedCount = clsSubjects.filter(s => classMappings[cId]?.[s.id]?.facultyId).length;
+                                            const isComplete = clsSubjects.length > 0 && mappedCount === clsSubjects.length;
+
+                                            return (
+                                                <div key={cId} onClick={() => setActiveClassId(cId)}
+                                                    style={{ 
+                                                        padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', 
+                                                        background: isActive ? '#eff6ff' : 'transparent',
+                                                        borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent'
+                                                    }}>
+                                                    <div style={{ fontWeight: 600, fontSize: 13, color: isActive ? 'var(--primary-600)' : 'inherit' }}>{cls.name}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{mappedCount} / {clsSubjects.length} subjects mapped</div>
+                                                    {isComplete ? <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>✅ Complete</span> : null}
+                                                </div>
+                                            );
+                                        })
+                                    )}
                                 </div>
                             </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Class</label>
-                                    <select className="form-select" value={newMapping.classId} onChange={e => setNewMapping({ ...newMapping, classId: e.target.value })}>
-                                        <option value="">Select Class</option>
-                                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Lab Co-Faculty (Optional)</label>
-                                    <select className="form-select" value={newMapping.labFaculty2Id} onChange={e => setNewMapping({ ...newMapping, labFaculty2Id: e.target.value })}>
-                                        <option value="">None</option>
-                                        {faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <button className="btn btn-primary btn-sm" onClick={addMapping}>+ Add Mapping</button>
-                        </div>
 
-                        <div className="checkbox-list">
-                            {mappings.map(m => (
-                                <label key={m.id} className="checkbox-item" style={{ justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                        <input type="checkbox" checked={selectedMappings.includes(m.id)} onChange={() => toggleMapping(m.id)} />
-                                        <div>
-                                            <div style={{ fontSize: 13 }}>
-                                                <strong>{m.facultyName}</strong>
-                                                <span className="mapping-arrow"> → </span>
-                                                <span style={{ color: 'var(--primary-400)' }}>{m.subjectName}</span>
-                                                <span className="mapping-arrow"> → </span>
-                                                <span>{m.className}</span>
+                            {/* Right Content: Subject Assignment Form for Active Class */}
+                            <div style={{ flex: 1 }}>
+                                {activeClassId ? (() => {
+                                    const ac = classes.find(c => c.id === activeClassId);
+                                    if (!ac) return null;
+                                    const relevantSubjects = subjects.filter(s => s.year === ac.year && (!s.departmentId || s.departmentId === ac.departmentId));
+
+                                    return (
+                                        <div className="card" style={{ padding: '20px', minHeight: 400 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border-color)' }}>
+                                                <div>
+                                                    <h3 style={{ fontSize: 16, margin: 0, color: 'var(--primary-600)' }}>{ac.name}</h3>
+                                                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Year {ac.year} • Section {ac.section}</div>
+                                                </div>
+                                                <button className="btn btn-primary" onClick={() => saveClassMappings(activeClassId)} disabled={savingMappings}>
+                                                    {savingMappings ? 'Saving...' : 'Save Class Mappings'}
+                                                </button>
                                             </div>
-                                            {m.labFaculty2Name && (
-                                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Lab Co-Faculty: {m.labFaculty2Name}</div>
+
+                                            {relevantSubjects.length === 0 ? (
+                                                <div className="empty-state">No subjects found for Year {ac.year}. Add subjects first.</div>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                                    {relevantSubjects.map(sub => {
+                                                        const mappingData = classMappings[activeClassId]?.[sub.id] || { facultyId: '', labFaculty2Id: '' };
+                                                        return (
+                                                            <div key={sub.id} style={{ display: 'flex', gap: 16, alignItems: 'center', background: '#f8fafc', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                                                                <div style={{ flex: '1 1 30%' }}>
+                                                                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+                                                                        <span className={`badge ${sub.type === 'lab' ? 'badge-lab' : sub.type === 'theory' ? 'badge-theory' : sub.type === 'project' ? 'badge-project' : 'badge-elective'}`} style={{ marginRight: 6 }}>{sub.type}</span>
+                                                                        {sub.name}
+                                                                    </div>
+                                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{sub.code} ({sub.credits} cr)</div>
+                                                                </div>
+                                                                
+                                                                <div style={{ flex: '1 1 35%' }}>
+                                                                    <select className="form-select" style={{ fontSize: 12 }} 
+                                                                        value={mappingData.facultyId} 
+                                                                        onChange={e => handleMappingChange(activeClassId, sub.id, 'facultyId', e.target.value)}>
+                                                                        <option value="">Select Primary Faculty</option>
+                                                                        {faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                                    </select>
+                                                                </div>
+
+                                                                <div style={{ flex: '1 1 35%' }}>
+                                                                    <select className="form-select" style={{ fontSize: 12 }} 
+                                                                        value={mappingData.labFaculty2Id} 
+                                                                        onChange={e => handleMappingChange(activeClassId, sub.id, 'labFaculty2Id', e.target.value)}
+                                                                        disabled={sub.type !== 'lab' && sub.type !== 'project'}>
+                                                                        <option value="">{sub.type === 'lab' || sub.type === 'project' ? 'Log Co-Faculty (Optional)' : 'N/A'}</option>
+                                                                        {(sub.type === 'lab' || sub.type === 'project') && faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             )}
                                         </div>
+                                    );
+                                })() : (
+                                    <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400, color: 'var(--text-muted)' }}>
+                                        Select a class from the left sidebar to assign faculty.
                                     </div>
-                                    <button className="btn btn-danger btn-sm btn-icon" onClick={(e) => { e.preventDefault(); deleteMapping(m.id); }}>🗑</button>
-                                </label>
-                            ))}
+                                )}
+                            </div>
                         </div>
                     </div>
-                );
-
+                );                   
             case 4: // Review & Generate
                 return (
                     <div>
-                        <h2 className="wizard-card-title">⚡ Review & Generate</h2>
+                        <h2 className="wizard-card-title">Review & Generate</h2>
                         <p className="wizard-card-description">Review your configuration and generate the timetable.</p>
 
                         <div style={{ display: 'grid', gap: 12, marginBottom: 24 }}>
@@ -246,8 +324,8 @@ export default function GenerateWizard() {
                                     <div className="stat-label">Classes Selected</div>
                                 </div>
                                 <div className="stat-card">
-                                    <div className="stat-value">{selectedMappings.length}</div>
-                                    <div className="stat-label">Mappings Active</div>
+                                    <div className="stat-value">{mappings.length}</div>
+                                    <div className="stat-label">Total Mappings Defaulted</div>
                                 </div>
                                 <div className="stat-card">
                                     <div className="stat-value">{timeSlotConfigs.length}</div>
@@ -269,7 +347,7 @@ export default function GenerateWizard() {
                             {generating ? (
                                 <><span className="spinner" style={{ width: 20, height: 20, margin: 0, borderWidth: 2 }}></span> Generating...</>
                             ) : (
-                                '⚡ Generate Timetable'
+                                'Generate Timetable'
                             )}
                         </button>
                     </div>
@@ -283,7 +361,7 @@ export default function GenerateWizard() {
         <div className="fade-in">
             <ToastContainer toasts={toasts} removeToast={removeToast} />
             <div className="page-header">
-                <h1 className="page-title">⚡ Generation Wizard</h1>
+                <h1 className="page-title">Generation Wizard</h1>
                 <p className="page-subtitle">Step-by-step timetable generation</p>
             </div>
 

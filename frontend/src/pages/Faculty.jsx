@@ -31,7 +31,7 @@ export default function Faculty() {
         const file = e.target.files[0];
         if (!file) return;
 
-        console.log('📁 File selected:', file.name, 'Type:', file.type, 'Size:', file.size);
+        console.log(' File selected:', file.name, 'Type:', file.type, 'Size:', file.size);
 
         // Check file type
         const validTypes = [
@@ -41,12 +41,12 @@ export default function Faculty() {
         ];
 
         if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
-            addToast('⚠️ Please select a valid Excel file (.xlsx, .xls, or .csv)', 'error');
+            addToast('Please select a valid Excel file (.xlsx, .xls, or .csv)', 'error');
             e.target.value = '';
             return;
         }
 
-        addToast('📊 Processing file...', 'info');
+        addToast('Processing file...', 'info');
 
         try {
             const reader = new FileReader();
@@ -57,7 +57,7 @@ export default function Faculty() {
 
             reader.onload = async (event) => {
                 try {
-                    console.log('📖 File read successfully, parsing...');
+                    console.log('File read successfully, parsing...');
                     const workbook = XLSX.read(event.target.result, { type: 'binary' });
 
                     if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
@@ -68,13 +68,13 @@ export default function Faculty() {
                     const sheet = workbook.Sheets[sheetName];
                     const rows = XLSX.utils.sheet_to_json(sheet);
 
-                    console.log('📊 Excel rows parsed:', rows);
-                    console.log('📋 Available departments:', departments);
-                    console.log('👀 First 3 rows from Excel:');
+                    console.log('Excel rows parsed:', rows);
+                    console.log('Available departments:', departments);
+                    console.log('First 3 rows from Excel:');
                     console.table(rows.slice(0, 3));
 
                     if (rows.length === 0) {
-                        addToast('⚠️ Excel file is empty', 'error');
+                        addToast('Excel file is empty', 'error');
                         return;
                     }
 
@@ -102,27 +102,27 @@ export default function Faculty() {
                         return { name, departmentId, designation };
                     });
 
-                    console.log('📤 Sending data to backend:', data);
-                    console.log('👀 First 3 mapped records:');
+                    console.log('Sending data to backend:', data);
+                    console.log('First 3 mapped records:');
                     console.table(data.slice(0, 3));
 
                     const result = await api.post('/faculty/import-excel', { data });
-                    addToast(`✅ Import complete: ${result.data.success} successful, ${result.data.failed} failed`);
+                    addToast(`Import complete: ${result.data.success} successful, ${result.data.failed} failed`);
                     if (result.data.errors.length > 0) {
-                        console.error('❌ Import errors:', result.data.errors);
-                        addToast(`⚠️ ${result.data.errors.length} errors occurred. Check console (F12).`, 'error');
+                        console.error('Import errors:', result.data.errors);
+                        addToast(`${result.data.errors.length} errors occurred. Check console (F12).`, 'error');
                     }
                     load();
                 } catch (err) {
-                    console.error('❌ Import error:', err);
+                    console.error('Import error:', err);
                     const errorMsg = err.response?.data?.error || err.message || 'Error importing Excel file';
-                    addToast(`❌ ${errorMsg}`, 'error');
+                    addToast(`${errorMsg}`, 'error');
                 }
             };
             reader.readAsBinaryString(file);
         } catch (err) {
-            console.error('❌ File read error:', err);
-            addToast(`❌ Error reading file: ${err.message}`, 'error');
+            console.error('File read error:', err);
+            addToast(`Error reading file: ${err.message}`, 'error');
         }
         e.target.value = ''; // Reset file input
     };
@@ -151,13 +151,13 @@ export default function Faculty() {
             <ToastContainer toasts={toasts} removeToast={removeToast} />
             <div className="table-header">
                 <div>
-                    <h1 className="page-title">👨‍🏫 Faculty</h1>
+                    <h1 className="page-title">Faculty</h1>
                     <p className="page-subtitle">Manage faculty members across departments</p>
                 </div>
                 <div className="btn-group">
-                    <input className="filter-input" placeholder="🔍 Search faculty..." value={filter} onChange={e => setFilter(e.target.value)} />
+                    <input className="filter-input" placeholder="Search faculty..." value={filter} onChange={e => setFilter(e.target.value)} />
                     <input type="file" ref={fileInputRef} onChange={handleExcelImport} accept=".xlsx,.xls" style={{ display: 'none' }} />
-                    <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>📊 Import Excel</button>
+                    <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>Import Excel</button>
                     <button className="btn btn-primary" onClick={openAdd}>+ Add Faculty</button>
                 </div>
             </div>
@@ -172,8 +172,8 @@ export default function Faculty() {
                                 <td style={{ color: 'var(--text-secondary)' }}>{f.designation || '-'}</td>
                                 <td>
                                     <div className="table-actions">
-                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(f)}>✏️</button>
-                                        <button className="btn btn-danger btn-sm" onClick={() => remove(f.id)}>🗑</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(f)}>Edit</button>
+                                        <button className="btn btn-danger btn-sm" onClick={() => remove(f.id)}>Delete</button>
                                     </div>
                                 </td>
                             </tr>

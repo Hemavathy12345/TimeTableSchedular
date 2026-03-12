@@ -48,7 +48,7 @@ export default function Departments() {
             <ToastContainer toasts={toasts} removeToast={removeToast} />
             <div className="table-header">
                 <div>
-                    <h1 className="page-title">🏛️ Departments</h1>
+                    <h1 className="page-title">Departments</h1>
                     <p className="page-subtitle">Manage academic departments</p>
                 </div>
                 <button className="btn btn-primary" onClick={openAdd}>+ Add Department</button>

@@ -602,6 +602,16 @@ a:hover {
   color: #c00;
 }
 
+.badge-project {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.badge-elective {
+  background: #e0f2f1;
+  color: #00695c;
+}
+
 /* === Modal === */
 .modal-overlay {
   position: fixed;
@@ -897,6 +907,14 @@ a:hover {
 
 .timetable-slot.lab {
   background: #fce8ef;
+}
+
+.timetable-slot.project {
+  background: #fff3e0;
+}
+
+.timetable-slot.elective {
+  background: #e0f2f1;
 }
 
 .timetable-slot.break-slot {

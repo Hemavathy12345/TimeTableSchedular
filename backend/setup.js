@@ -19,7 +19,7 @@ const data = {
     users: [
         { id: "admin-001", name: "Admin User", email: "admin@college.edu", password: hash, role: "admin", departmentId: null },
         { id: "faculty-001", name: "Dr. Sharma", email: "sharma@college.edu", password: hash, role: "faculty", departmentId: "dept-001" },
-        { id: "student-001", name: "Rahul Kumar", email: "rahul@college.edu", password: hash, role: "student", departmentId: "dept-001" }
+        // { id: "student-001", name: "Rahul Kumar", email: "rahul@college.edu", password: hash, role: "student", departmentId: "dept-001" }
     ],
     departments: [
         { id: "dept-001", name: "Computer Science & Engineering", code: "CSE" },

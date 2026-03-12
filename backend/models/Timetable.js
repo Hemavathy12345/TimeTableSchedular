@@ -2,13 +2,18 @@ import mongoose from 'mongoose';
 
 const timetableEntrySchema = new mongoose.Schema({
     classId: String,
-    subjectId: String,
-    facultyId: String,
+    subjectId: { type: String, default: null },
+    facultyId: { type: String, default: null },
     labFaculty2Id: { type: String, default: null },
-    roomId: String,
+    roomId: { type: String, default: null },
     day: String,
     slotIndex: Number,
-    duration: { type: Number, default: 1 }
+    duration: { type: Number, default: 1 },
+    isLab: { type: Boolean, default: false },
+    isFixed: { type: Boolean, default: false },
+    isActivity: { type: Boolean, default: false },
+    activityLabel: { type: String, default: null },
+    schedulingNote: { type: String, default: null }
 }, { _id: false });
 
 const conflictSchema = new mongoose.Schema({

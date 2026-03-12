@@ -43,7 +43,7 @@ export default function Rooms() {
             <ToastContainer toasts={toasts} removeToast={removeToast} />
             <div className="table-header">
                 <div>
-                    <h1 className="page-title">🏫 Rooms & Labs</h1>
+                    <h1 className="page-title">Rooms & Labs</h1>
                     <p className="page-subtitle">Manage classrooms and laboratory spaces</p>
                 </div>
                 <div className="btn-group">

@@ -11,17 +11,17 @@ export default function Sidebar() {
     const isFaculty = user?.role === 'faculty';
 
     const navItems = [
-        { path: '/dashboard', icon: '📊', label: 'Dashboard', roles: ['admin', 'faculty', 'student'] },
+        { path: '/dashboard', label: 'Dashboard', roles: ['admin', 'faculty', 'student'] },
         { type: 'section', label: 'Data Management', roles: ['admin'] },
-        { path: '/departments', icon: '🏛️', label: 'Departments', roles: ['admin'] },
-        { path: '/faculty', icon: '👨‍🏫', label: 'Faculty', roles: ['admin'] },
-        { path: '/rooms', icon: '🏫', label: 'Rooms & Labs', roles: ['admin'] },
-        { path: '/subjects', icon: '📚', label: 'Subjects', roles: ['admin'] },
-        { path: '/classes', icon: '🎓', label: 'Classes', roles: ['admin'] },
-        { path: '/timeslots', icon: '⏰', label: 'Time Slots', roles: ['admin'] },
+        { path: '/departments', label: 'Departments', roles: ['admin'] },
+        { path: '/faculty', label: 'Faculty', roles: ['admin'] },
+        { path: '/rooms', label: 'Rooms & Labs', roles: ['admin'] },
+        { path: '/subjects', label: 'Subjects', roles: ['admin'] },
+        { path: '/classes', label: 'Classes', roles: ['admin'] },
+        { path: '/timeslots', label: 'Time Slots', roles: ['admin'] },
         { type: 'section', label: 'Scheduling', roles: ['admin'] },
-        { path: '/generate', icon: '⚡', label: 'Generate Timetable', roles: ['admin'] },
-        { path: '/timetables', icon: '📅', label: 'View Timetables', roles: ['admin', 'faculty', 'student'] },
+        { path: '/generate', label: 'Generate Timetable', roles: ['admin'] },
+        { path: '/timetables', label: 'View Timetables', roles: ['admin', 'faculty', 'student'] },
     ];
 
     const filteredItems = navItems.filter(item => item.roles.includes(user?.role));
@@ -29,10 +29,10 @@ export default function Sidebar() {
     return (
         <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
             <div className="sidebar-header">
-                <div className="sidebar-logo">CT</div>
+                {/* <div className="sidebar-logo">P</div> */}
                 {!collapsed && (
                     <div>
-                        <div className="sidebar-title">ChronoTable</div>
+                        <div className="sidebar-title">Planora</div>
                         <div className="sidebar-subtitle">Timetable System</div>
                     </div>
                 )}

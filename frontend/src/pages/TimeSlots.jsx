@@ -68,6 +68,7 @@ export default function TimeSlots() {
         switch (type) {
             case 'break': return 'var(--warning)';
             case 'lunch': return 'var(--success)';
+            case 'activity': return '#a78bfa';
             default: return 'var(--primary-400)';
         }
     };
@@ -77,10 +78,10 @@ export default function TimeSlots() {
             <ToastContainer toasts={toasts} removeToast={removeToast} />
             <div className="table-header">
                 <div>
-                    <h1 className="page-title">⏰ Time Slot Configuration</h1>
+                    <h1 className="page-title">Time Slot Configuration</h1>
                     <p className="page-subtitle">Configure staggered timings for each year level</p>
                 </div>
-                <button className="btn btn-primary" onClick={save}>💾 Save Configuration</button>
+                <button className="btn btn-primary" onClick={save}>Save Configuration</button>
             </div>
 
             <div className="view-toggle" style={{ marginBottom: 24, width: 'fit-content' }}>
@@ -136,9 +137,10 @@ export default function TimeSlots() {
                                     value={slot.type}
                                     onChange={e => updateSlot(idx, 'type', e.target.value)}
                                 >
-                                    <option value="class">📖 Class</option>
-                                    <option value="break">☕ Break</option>
-                                    <option value="lunch">🍽️ Lunch</option>
+                                    <option value="class">Class</option>
+                                    <option value="break">Break</option>
+                                    <option value="lunch">Lunch</option>
+                                    <option value="activity">Activity Hour</option>
                                 </select>
                                 <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeSlot(idx)}>×</button>
                             </div>

@@ -6,21 +6,39 @@ import { useToast, ToastContainer } from '../components/Toast';
 export default function Classes() {
     const [classes, setClasses] = useState([]);
     const [departments, setDepartments] = useState([]);
+    const [rooms, setRooms] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ name: '', year: 1, section: 'A', departmentId: '' });
+    const [form, setForm] = useState({ name: '', year: 1, section: 'A', departmentId: '', defaultRoomId: '' });
     const { toasts, addToast, removeToast } = useToast();
 
     useEffect(() => { load(); }, []);
 
     const load = async () => {
-        const [c, d] = await Promise.all([api.get('/classes'), api.get('/departments')]);
-        setClasses(c.data); setDepartments(d.data);
+        const [c, d, r] = await Promise.all([api.get('/classes'), api.get('/departments'), api.get('/rooms')]);
+        setClasses(c.data); setDepartments(d.data); setRooms(r.data);
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
-    const openAdd = () => { setEditing(null); setForm({ name: '', year: 1, section: 'A', departmentId: departments[0]?.id || '' }); setShowModal(true); };
-    const openEdit = (c) => { setEditing(c); setForm({ name: c.name, year: c.year, section: c.section, departmentId: c.departmentId }); setShowModal(true); };
+    const roomName = (id) => rooms.find(r => r.id === id)?.name || '-';
+    const openAdd = () => { 
+        setEditing(null); 
+        setForm({ 
+            name: '', year: 1, section: 'A', 
+            departmentId: departments[0]?.id || '',
+            defaultRoomId: '' 
+        }); 
+        setShowModal(true); 
+    };
+    const openEdit = (c) => { 
+        setEditing(c); 
+        setForm({ 
+            name: c.name, year: c.year, section: c.section, 
+            departmentId: c.departmentId,
+            defaultRoomId: c.defaultRoomId || '' 
+        }); 
+        setShowModal(true); 
+    };
 
     const save = async () => {
         try {
@@ -47,7 +65,7 @@ export default function Classes() {
             </div>
             <div className="data-table-wrapper">
                 <table className="data-table">
-                    <thead><tr><th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Default Room</th><th>Actions</th></tr></thead>
                     <tbody>
                         {classes.map(c => (
                             <tr key={c.id}>
@@ -55,6 +73,7 @@ export default function Classes() {
                                 <td>Year {c.year}</td>
                                 <td><span className="badge badge-success">{c.section}</span></td>
                                 <td>{deptName(c.departmentId)}</td>
+                                <td><span className="badge badge-classroom">{roomName(c.defaultRoomId)}</span></td>
                                 <td>
                                     <div className="table-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>✏️</button>
@@ -63,7 +82,7 @@ export default function Classes() {
                                 </td>
                             </tr>
                         ))}
-                        {classes.length === 0 && <tr><td colSpan={5} className="empty-state">No classes found</td></tr>}
+                        {classes.length === 0 && <tr><td colSpan={6} className="empty-state">No classes found</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -89,6 +108,15 @@ export default function Classes() {
                     <label className="form-label">Department</label>
                     <select className="form-select" value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })}>
                         {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Default Classroom</label>
+                    <select className="form-select" value={form.defaultRoomId} onChange={e => setForm({ ...form, defaultRoomId: e.target.value })}>
+                        <option value="">None</option>
+                        {rooms.filter(r => r.type === 'classroom').map(r => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
                     </select>
                 </div>
             </Modal>
