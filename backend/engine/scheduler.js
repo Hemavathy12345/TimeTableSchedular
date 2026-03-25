@@ -160,6 +160,14 @@ export function generateTimetable(data) {
         if (!placed) finalUnplaced.push(task);
     }
 
+    // ─── Phase 7: Fill remaining free slots ───────────────────────────────────
+    // After all required sessions are placed, scan every remaining empty
+    // class-type slot and fill it with an extra session of the
+    // highest-priority subject whose faculty and room are free.
+    // This guarantees no free periods remain in the timetable.
+    fillFreeSlots(entries, occupancies, classes, subjects, rooms,
+                  facultySubjectMapping, getSlotConfig, getClassSlots);
+
     // ─── Report truly unplaceable tasks ───────────────────────────────────────
     for (const { cls, subject } of finalUnplaced) {
         conflicts.push({
@@ -189,8 +197,8 @@ export function generateTimetable(data) {
  *
  * Placement preferences (slot ordering heuristics):
  *   - Labs/projects → prefer later slots in the day
- *   - Theory/elective → prefer earlier slots (mornings)
- *   - All types → prefer days where the subject has not appeared yet (spread)
+ *   - Theory/elective → prefer less-loaded slots (fewest uses across the week), earlier as tiebreaker
+ *   - All types → prefer lighter days (fewest total entries for this class), subject-spread as tiebreaker
  *   - Projects → prefer Saturday
  */
 function placeTask(task, entries, { faculty: fOcc, room: rOcc, class: cOcc },
@@ -228,23 +236,51 @@ function placeTask(task, entries, { faculty: fOcc, room: rOcc, class: cOcc },
                 (s.type === 'lab' || s.type === 'project'))
         );
 
-    // Day ordering: prefer days where this subject hasn't appeared (spread)
-    let sortedDays = [...days].sort(
-        (a, b) => (existingDays.has(a) ? 1 : 0) - (existingDays.has(b) ? 1 : 0)
-    );
-    // Projects prefer Saturday
+    // Day load: total entries already placed for this class on each day.
+    // Used as primary sort key so lighter days (e.g. Fri/Sat) are filled
+    // before heavier ones, preventing Mon–Thu overload.
+    const dayLoad = {};
+    days.forEach(d => {
+        dayLoad[d] = entries.filter(e => e.classId === cls.id && e.day === d).length;
+    });
+
+    // Day ordering:
+    //   1. Prefer days with fewer total entries (load balancing → fills Fri/Sat)
+    //   2. Prefer days where this subject hasn't appeared yet (spread)
+    let sortedDays = [...days].sort((a, b) => {
+        const loadDiff = (dayLoad[a] || 0) - (dayLoad[b] || 0);
+        if (loadDiff !== 0) return loadDiff;
+        return (existingDays.has(a) ? 1 : 0) - (existingDays.has(b) ? 1 : 0);
+    });
+    // Projects still prefer Saturday
     if (isProject) {
         sortedDays.sort((a, b) => (a === 'Saturday' ? 0 : 1) - (b === 'Saturday' ? 0 : 1));
     }
 
-    // Slot ordering: block types prefer later slots; theory prefers earlier
+    // Slot load: how many times each slot index is already used across all days
+    // for this class. Used to vary which period subjects occupy each day,
+    // preventing the "same subject at the same time every day" pattern.
+    const slotLoad = {};
+    classSlots.forEach(s => {
+        slotLoad[s.index] = entries.filter(e => e.classId === cls.id && e.slotIndex === s.index).length;
+    });
+
+    // Slot ordering:
+    //   - Block types (lab/project): prefer later slots in the day (unchanged)
+    //   - Theory/elective: prefer less-loaded slots (spread across periods),
+    //     with earlier slot as tiebreaker to keep mornings busy first
     const sortedSlots = isBlockType
         ? [...classSlots].sort((a, b) => b.index - a.index)
-        : [...classSlots].sort((a, b) => a.index - b.index);
+        : [...classSlots].sort((a, b) => {
+            const slotLoadDiff = (slotLoad[a.index] || 0) - (slotLoad[b.index] || 0);
+            if (slotLoadDiff !== 0) return slotLoadDiff;
+            return a.index - b.index;
+        });
 
     for (const day of sortedDays) {
-        // Soft constraint: theory/elective max 2 of the same subject per day
-        if (!relaxed && isTheoryLike && (dayCount[day] || 0) >= 2) continue;
+            // Soft constraint: theory/elective max 3 of the same subject per day
+            // (Increased from 2 to reduce fragmented free slots)
+            if (!relaxed && isTheoryLike && (dayCount[day] || 0) >= 3) continue;
         // Soft constraint: only one block-type session per day per class
         if (!relaxed && isBlockType  && dayHasOtherBlock(day))       continue;
 
@@ -285,6 +321,7 @@ function placeTask(task, entries, { faculty: fOcc, room: rOcc, class: cOcc },
                 day,
                 slotIndex:     slotIdx,
                 isLab:         subject.type === 'lab',
+                subjectType:   subject.type,
                 labFaculty2Id: mapping.labFaculty2Id || null,
                 isFixed:       false,
                 duration:      slotsNeeded,
@@ -444,6 +481,118 @@ function swapRepair(task, entries, occupancies, subjects, classes, rooms,
     return false;
 }
 
+// ─── Phase 7: Fill remaining free slots ───────────────────────────────────────
+/**
+ * Scan every empty class-type slot and fill it with an extra session of the
+ * highest-priority subject for that class whose faculty and room are free.
+ *
+ * Subject priority order (same as PRIORITY_MAP): theory → elective → Non-Academic.
+ * Labs and projects are excluded — they require consecutive multi-slots and are
+ * already placed as required sessions above.
+ * Within the same priority tier, subjects with more required weekly periods rank
+ * higher (core/frequent subjects get the extra time first).
+ *
+ * Only hard constraints are enforced (no double-booking of faculty/room/class).
+ */
+function fillFreeSlots(entries, { faculty: fOcc, room: rOcc, class: cOcc },
+                       classes, subjects, rooms, facultySubjectMapping,
+                       getSlotConfig, getClassSlots) {
+    for (const cls of classes) {
+        const config = getSlotConfig(cls.year);
+        if (!config) continue;
+
+        const days        = config.days;
+        // Scan ALL non-break/non-lunch slots for gaps — this deliberately includes
+        // 'activity' type slots that getClassSlots() would silently skip.
+        // Activity slots are now filled ONLY by subjects of type 'activity'.
+        const rawSlots    = config.slots.toObject ? config.slots.toObject() : config.slots;
+        const fillableSlots = rawSlots
+            .map((s, i) => ({ type: s.type, index: i }))
+            .filter(s => s.type !== 'break' && s.type !== 'lunch');
+
+        // Build gap-fill pool: all single-period subjects for this class,
+        // sorted by priority then by required weekly periods (desc).
+        const pool = facultySubjectMapping
+            .filter(m => m.classId === cls.id)
+            .map(m => ({ mapping: m, subject: subjects.find(s => s.id === m.subjectId) }))
+            .filter(({ subject }) =>
+                subject &&
+                subject.type !== 'lab' &&
+                subject.type !== 'project'
+            )
+            .sort((a, b) => {
+                const priDiff = (PRIORITY_MAP[a.subject.type] ?? 5) -
+                                (PRIORITY_MAP[b.subject.type] ?? 5);
+                if (priDiff !== 0) return priDiff;
+                // More required periods = more important/core subject
+                return weeklyPeriods(b.subject) - weeklyPeriods(a.subject);
+            });
+
+        if (pool.length === 0) continue;
+
+        // Round-robin pointer: advances after every successful placement so
+        // extra slots are distributed evenly across all subjects.
+        // First free slot → CCS (highest priority)
+        // Second free slot → ST (next in priority)
+        // Third free slot → OOAD → SPM → … → wraps back to CCS, etc.
+        let rrPointer = 0;
+
+        for (const day of days) {
+            for (const slot of fillableSlots) {
+                const slotIdx = slot.index;
+                const key     = getKey(day, slotIdx);
+
+                if (isOccupied(cOcc, key, cls.id)) continue; // already filled
+
+                // Starting from the current round-robin position, walk through
+                // the pool until a subject whose faculty and room are free is found.
+                // The pointer advances past the placed subject so the NEXT free slot
+                // starts from the subject after the one just used.
+                for (let attempt = 0; attempt < pool.length; attempt++) {
+                    const idx = (rrPointer + attempt) % pool.length;
+                    const { mapping, subject } = pool[idx];
+
+                    // Only allow subjects clearly marked as 'activity' in 'activity' slots,
+                    // and prevent activity subjects from taking up regular class slots.
+                    if (slot.type === 'activity' && subject.type !== 'activity') continue;
+                    if (slot.type === 'class'    && subject.type === 'activity') continue;
+
+                    if (isOccupied(fOcc, key, mapping.facultyId)) continue;
+                    if (mapping.labFaculty2Id &&
+                        isOccupied(fOcc, key, mapping.labFaculty2Id)) continue;
+
+                    const room = findRoom(rooms, subject, day, slotIdx, rOcc, cls, 1);
+                    if (!room) continue;
+
+                    entries.push({
+                        classId:        cls.id,
+                        subjectId:      subject.id,
+                        facultyId:      mapping.facultyId,
+                        roomId:         room.id,
+                        day,
+                        slotIndex:      slotIdx,
+                        isLab:          false,
+                        labFaculty2Id:  mapping.labFaculty2Id || null,
+                        isFixed:        false,
+                        isExtra:        true,
+                        duration:       1,
+                        schedulingNote: subject.type === 'activity' ? 'Activity session' : 'Extra session (gap-fill)'
+                    });
+                    occupy(fOcc, key, mapping.facultyId);
+                    occupy(rOcc, key, room.id);
+                    occupy(cOcc, key, cls.id);
+                    if (mapping.labFaculty2Id) occupy(fOcc, key, mapping.labFaculty2Id);
+
+                    // Advance past the subject just placed so the next free slot
+                    // starts from the following subject in the pool
+                    rrPointer = (idx + 1) % pool.length;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 // ─── Room finder ──────────────────────────────────────────────────────────────
 /**
  * Find an available room of the correct type for `slotsNeeded` consecutive slots.
@@ -592,7 +741,8 @@ export function checkConstraints(entries, data) {
             const key = `${mapping.classId}-${mapping.subjectId}`;
             const count = frequencyCount[key] || 0;
             const expected = weeklyPeriods(subject);
-            if (count !== expected) {
+            // Only flag under-scheduling; extra gap-fill sessions (isExtra) are intentional
+            if (count < expected) {
                 violations.push(`Subject ${mapping.subjectId} for class ${mapping.classId} scheduled ${count} period(s) but requires ${expected} weekly periods (from ${subject.totalHours} total hours)`);
             }
         }

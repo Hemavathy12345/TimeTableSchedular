@@ -10,7 +10,7 @@ export default function Subjects() {
     const [showModal, setShowModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ name: '', code: '', type: 'theory', credits: 0, weeklyFrequency: 3, year: 1, departmentId: '', duration: 1 });
+    const [form, setForm] = useState({ name: '', code: '', type: 'theory', totalHours: 3, year: 1, departmentId: '', duration: 1 });
     const [filters, setFilters] = useState({ dept: '', year: '', type: '' });
     const [importData, setImportData] = useState([]);
     const [importErrors, setImportErrors] = useState([]);
@@ -26,13 +26,13 @@ export default function Subjects() {
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
-    const openAdd = () => { setEditing(null); setForm({ name: '', code: '', type: 'theory', credits: 0, weeklyFrequency: 3, year: 1, departmentId: departments[0]?.id || '', duration: 1 }); setShowModal(true); };
-    const openEdit = (s) => { setEditing(s); setForm({ name: s.name, code: s.code, type: s.type, credits: s.credits || 0, weeklyFrequency: s.weeklyFrequency, year: s.year, departmentId: s.departmentId, duration: s.duration }); setShowModal(true); };
+    const openAdd = () => { setEditing(null); setForm({ name: '', code: '', type: 'theory', totalHours: 3, year: 1, departmentId: departments[0]?.id || '', duration: 1 }); setShowModal(true); };
+    const openEdit = (s) => { setEditing(s); setForm({ name: s.name, code: s.code, type: s.type, totalHours: s.totalHours, year: s.year, departmentId: s.departmentId, duration: s.duration }); setShowModal(true); };
 
     const save = async () => {
         try {
             const data = { ...form };
-            // duration auto-set by server based on type+credits, but set a sensible default client-side
+            // duration auto-set by server based on type, but set a sensible default client-side
             if (form.type === 'lab' || form.type === 'project') data.duration = 2;
             else data.duration = 1;
             if (editing) { await api.put(`/subjects/${editing.id}`, data); addToast('Subject updated'); }
@@ -49,14 +49,14 @@ export default function Subjects() {
     // ── Excel Import ──────────────────────────────────────────────────────────
     const downloadTemplate = () => {
         const ws = XLSX.utils.aoa_to_sheet([
-            ['Course Title', 'Course Code', 'Type (Theory/Lab/Project/Elective)', 'Credits', 'Year', 'Department'],
-            ['Programming for Problem Solving', 'U23CS101', 'Theory', 4, 1, 'Computer Science & Engineering'],
-            ['Programming for Problem Solving Lab', 'U23CS101L', 'Lab', 2, 1, 'Computer Science & Engineering'],
-            ['Engineering Mathematics I', 'U23MA101', 'Theory', 4, 1, 'Computer Science & Engineering'],
-            ['Data Structures', 'U23CS201', 'Theory', 3, 2, 'Computer Science & Engineering'],
-            ['Data Structures Lab', 'U23CS201L', 'Lab', 2, 2, 'Computer Science & Engineering'],
-            ['Mini Project', 'U23CS291', 'Project', 2, 2, 'Computer Science & Engineering'],
-            ['Open Elective I', 'U23OE101', 'Elective', 3, 3, 'Computer Science & Engineering'],
+            ['Course Title', 'Course Code', 'Type (Theory/Lab/Project/Elective/Non-Academic)', 'Total Hours', 'Year', 'Department'],
+            ['Programming for Problem Solving', 'U23CS101', 'Theory', 60, 1, 'Computer Science & Engineering'],
+            ['Programming for Problem Solving Lab', 'U23CS101L', 'Lab', 30, 1, 'Computer Science & Engineering'],
+            ['Engineering Mathematics I', 'U23MA101', 'Theory', 60, 1, 'Computer Science & Engineering'],
+            ['Data Structures', 'U23CS201', 'Theory', 45, 2, 'Computer Science & Engineering'],
+            ['Data Structures Lab', 'U23CS201L', 'Lab', 30, 2, 'Computer Science & Engineering'],
+            ['Mini Project', 'U23CS291', 'Project', 30, 2, 'Computer Science & Engineering'],
+            ['Open Elective I', 'U23OE101', 'Elective', 45, 3, 'Computer Science & Engineering'],
         ]);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Subjects');
@@ -116,7 +116,7 @@ export default function Subjects() {
             <div className="table-header">
                 <div>
                     <h1 className="page-title">Subjects</h1>
-                    <p className="page-subtitle">Manage subjects — credits drive weekly period allocation (1 credit = 1 period/week)</p>
+                    <p className="page-subtitle">Manage subjects — set total hours to drive period allocation in the timetable</p>
                 </div>
                 <div className="btn-group">
                     <select className="form-select" style={{ width: 180 }} value={filters.dept} onChange={e => setFilters({ ...filters, dept: e.target.value })}>
@@ -133,6 +133,7 @@ export default function Subjects() {
                         <option value="lab">Lab</option>
                         <option value="project">Project</option>
                         <option value="elective">Elective</option>
+                        <option value="Non-Academic">Non-Academic</option>
                     </select>
                     <button className="btn btn-secondary" onClick={openImport}>Import Excel</button>
                     <button className="btn btn-primary" onClick={openAdd}>+ Add Subject</button>
@@ -141,15 +142,14 @@ export default function Subjects() {
 
             <div className="data-table-wrapper">
                 <table className="data-table">
-                    <thead><tr><th>Name</th><th>Code</th><th>Type</th><th>Credits</th><th>Periods/Week</th><th>Year</th><th>Department</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Code</th><th>Type</th><th>Weekly Periods</th><th>Year</th><th>Department</th><th>Actions</th></tr></thead>
                     <tbody>
                         {filtered.map(s => (
                             <tr key={s.id}>
                                 <td style={{ fontWeight: 600 }}>{s.name}</td>
                                 <td>{s.code}</td>
                                 <td><span className={`badge badge-${s.type}`}>{s.type}</span></td>
-                                <td>{s.credits > 0 ? s.credits : '—'}</td>
-                                <td>{s.weeklyFrequency}× / week{s.credits > 0 ? ' (from credits)' : ''}</td>
+                                <td>{Math.ceil((s.totalHours || s.weeklyFrequency || 1) / 15)} hrs/wk</td>
                                 <td>Year {s.year}</td>
                                 <td>{deptName(s.departmentId)}</td>
                                 <td>
@@ -186,19 +186,15 @@ export default function Subjects() {
                             <option value="lab">Lab</option>
                             <option value="project">Project</option>
                             <option value="elective">Elective</option>
+                            <option value="Non-Academic">Non-Academic</option>
                         </select>
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Credits <span style={{ color: '#888', fontWeight: 400 }}>(1 credit = 1 period/wk)</span></label>
-                        <input className="form-input" type="number" min="0" max="10" value={form.credits}
-                            onChange={e => setForm({ ...form, credits: parseInt(e.target.value) || 0 })} />
                     </div>
                 </div>
                 <div className="form-row">
                     <div className="form-group">
-                        <label className="form-label">Weekly Frequency <span style={{ color: '#888', fontWeight: 400 }}>(used only if Credits = 0)</span></label>
-                        <input className="form-input" type="number" min="1" max="7" value={form.weeklyFrequency}
-                            onChange={e => setForm({ ...form, weeklyFrequency: parseInt(e.target.value) })} />
+                        <label className="form-label">Total Semester Hours <span style={{ color: '#888', fontWeight: 400 }}>(÷ 15 weeks = weekly periods)</span></label>
+                        <input className="form-input" type="number" min="1" max="120" value={form.totalHours}
+                            onChange={e => setForm({ ...form, totalHours: parseInt(e.target.value) || 1 })} />
                     </div>
                     <div className="form-group">
                         <label className="form-label">Year</label>
@@ -238,8 +234,8 @@ export default function Subjects() {
                     <strong>Supported columns:</strong><br />
                     • <code>Course Title</code> / <code>Course Name</code> / <code>name</code><br />
                     • <code>Course Code</code> / <code>code</code><br />
-                    • <code>Type (Theory/Lab/Project/Elective)</code> / <code>type</code><br />
-                    • <code>Credits</code> / <code>Credit Hours</code> — sets periods/week automatically<br />
+                    • <code>Type (Theory/Lab/Project/Elective/Non-Academic)</code> / <code>type</code><br />
+                    • <code>Total Hours</code> / <code>totalHours</code> — sets periods/week (÷ 15 weeks)<br />
                     • <code>Year</code> (I / II / III / IV or 1–4)<br />
                     • <code>Department</code> / <code>departmentId</code> (Name or Code)
                 </div>
@@ -254,7 +250,6 @@ export default function Subjects() {
                                     <th>Course Title</th>
                                     <th>Code</th>
                                     <th>Type</th>
-                                    <th>Credits</th>
                                     <th>Year</th>
                                     <th>Department</th>
                                 </tr>
@@ -266,7 +261,6 @@ export default function Subjects() {
                                         <td>{row['Course Title'] || row['Course Name'] || row.name}</td>
                                         <td>{row['Course Code'] || row.code}</td>
                                         <td>{row['Type (Theory/Lab/Project/Elective)'] || row.Type || row.type}</td>
-                                        <td>{row.Credits || row.credits || '—'}</td>
                                         <td>{row.Year || row.year}</td>
                                         <td>{row.Department || row.department}</td>
                                     </tr>

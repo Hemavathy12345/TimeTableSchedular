@@ -53,7 +53,8 @@ export default function FacultyOverview() {
         </div>
     );
 
-    const { timetableName, timeSlotConfig, facultySchedules } = data;
+    const { timetableName, timeSlotConfigs, facultySchedules } = data;
+    const allConfigs = timeSlotConfigs || [];
 
     // Filter by search
     const filtered = facultySchedules.filter(fs =>
@@ -63,35 +64,48 @@ export default function FacultyOverview() {
     const totalOverlaps = facultySchedules.reduce((sum, fs) => sum + fs.overlaps.length, 0);
     const facultiesWithOverlaps = facultySchedules.filter(fs => fs.overlaps.length > 0);
 
-    // Build overlap key set for quick lookup
-    const buildOverlapKeys = (fs) => {
-        const keys = new Set();
-        fs.overlaps.forEach(o => keys.add(`${o.day}-${o.slotIndex}`));
-        return keys;
-    };
-
     // Prepare timeline dimensions
-    const days = timeSlotConfig?.days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    const allSlots = timeSlotConfig?.slots || [];
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     
-    // Find absolute bounds for the x-axis
-    let minMins = 8 * 60; // default 08:00
-    let maxMins = 17 * 60; // default 17:00
+    // Find absolute bounds for the x-axis across ALL entries and ALL slots
+    let minMins = 24 * 60; 
+    let maxMins = 0;
 
-    if (allSlots.length > 0) {
-        minMins = Math.min(...allSlots.map(s => timeToMins(s.start)));
-        maxMins = Math.max(...allSlots.map(s => timeToMins(s.end)));
-    }
+    facultySchedules.forEach(fs => {
+        fs.entries.forEach(e => {
+            if (e.startTime) minMins = Math.min(minMins, timeToMins(e.startTime));
+            if (e.endTime) maxMins = Math.max(maxMins, timeToMins(e.endTime));
+        });
+    });
+
+    allConfigs.forEach(cfg => {
+        cfg.slots.forEach(s => {
+            minMins = Math.min(minMins, timeToMins(s.start));
+            maxMins = Math.max(maxMins, timeToMins(s.end));
+        });
+    });
+
+    // Fallback if no slots/entries
+    if (minMins > maxMins) { minMins = 8 * 60; maxMins = 17 * 60; }
     
     // Add small padding to left/right for aesthetics (30 mins)
-    minMins -= 30;
-    maxMins += 30;
+    minMins = Math.floor(minMins / 60) * 60; // Snap to hour
+    maxMins = Math.ceil(maxMins / 60) * 60;   // Snap to hour
     const totalDuration = maxMins - minMins;
 
     const getLeftPercent = (timeStr) => ((timeToMins(timeStr) - minMins) / totalDuration) * 100;
+    const getWidthPercent = (start, end) => ((timeToMins(end) - timeToMins(start)) / totalDuration) * 100;
 
-    // Determine the class slots to map entry.slotIndex back to exact slot times
-    const classSlots = allSlots.filter(s => s.type === 'class');
+    // Collect all unique non-class slots (Gaps) for background rendering
+    const uniqueGaps = [];
+    allConfigs.forEach(cfg => {
+        cfg.slots.forEach(s => {
+            if (s.type !== 'class') {
+                const exists = uniqueGaps.find(g => g.start === s.start && g.end === s.end && g.type === s.type);
+                if (!exists) uniqueGaps.push(s);
+            }
+        });
+    });
 
     return (
         <div className="fade-in" style={{ minHeight: '100vh' }}>
@@ -166,8 +180,6 @@ export default function FacultyOverview() {
             )}
 
             {filtered.map(fs => {
-                const overlapKeys = buildOverlapKeys(fs);
-                
                 return (
                     <div key={fs.facultyId} style={{
                         marginBottom: 32,
@@ -257,27 +269,27 @@ export default function FacultyOverview() {
                                             {/* Row Track */}
                                             <div style={{ flexGrow: 1, position: 'relative', height: '100%', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
 
-                                                {/* Break/Lunch stripes inside each row track — perfectly aligned with sessions */}
-                                                {allSlots.filter(s => s.type !== 'class').map((slot, idx) => {
+                                                {/* Break/Lunch/Activity stripes — perfectly aligned with sessions */}
+                                                {uniqueGaps.map((slot, idx) => {
                                                     const left = getLeftPercent(slot.start);
-                                                    const width = getLeftPercent(slot.end) - left;
+                                                    const width = getWidthPercent(slot.start, slot.end);
                                                     return (
-                                                        <div key={`break-${idx}`} style={{
+                                                        <div key={`gap-${idx}`} style={{
                                                             position: 'absolute',
                                                             left: `${left}%`,
                                                             width: `${width}%`,
                                                             top: 0,
                                                             bottom: 0,
-                                                            background: slot.type === 'lunch' ? 'rgba(16,185,129,0.07)' : 'rgba(245,158,11,0.07)',
-                                                            borderLeft: slot.type === 'lunch' ? '1px dashed rgba(16,185,129,0.35)' : '1px dashed rgba(245,158,11,0.35)',
-                                                            borderRight: slot.type === 'lunch' ? '1px dashed rgba(16,185,129,0.35)' : '1px dashed rgba(245,158,11,0.35)',
+                                                            background: slot.type === 'lunch' ? 'rgba(16,185,129,0.08)' : (slot.type === 'activity' ? 'rgba(139,92,246,0.06)' : 'rgba(245,158,11,0.08)'),
+                                                            borderLeft: '1px dashed rgba(0,0,0,0.1)',
+                                                            borderRight: '1px dashed rgba(0,0,0,0.1)',
                                                             zIndex: 0,
                                                             pointerEvents: 'none',
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             justifyContent: 'center'
                                                         }}>
-                                                            <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 9, color: 'var(--text-muted)', opacity: 0.5, letterSpacing: 2 }}>
+                                                            <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 8, color: 'var(--text-muted)', opacity: 0.6, letterSpacing: 1 }}>
                                                                 {slot.type.toUpperCase()}
                                                             </span>
                                                         </div>
@@ -286,12 +298,11 @@ export default function FacultyOverview() {
 
                                                 {/* Session blocks */}
                                                 {dayEntries.map((e, idx) => {
-                                                    const slotDef = classSlots[e.slotIndex];
-                                                    if (!slotDef) return null;
+                                                    if (!e.startTime || !e.endTime) return null;
 
-                                                    const isOverlap = overlapKeys.has(`${e.day}-${e.slotIndex}`);
-                                                    const left = getLeftPercent(slotDef.start);
-                                                    const width = getLeftPercent(slotDef.end) - left;
+                                                    const isOverlap = fs.overlaps.some(o => o.day === e.day && o.slotIndex === e.slotIndex);
+                                                    const left = getLeftPercent(e.startTime);
+                                                    const width = getWidthPercent(e.startTime, e.endTime);
 
                                                     const sharingEntries = dayEntries.filter(ee => ee.slotIndex === e.slotIndex);
                                                     const sharingIndex = sharingEntries.findIndex(ee => ee.subjectId === e.subjectId && ee.classId === e.classId);
@@ -323,7 +334,7 @@ export default function FacultyOverview() {
                                                             transition: 'transform 0.2s',
                                                             cursor: 'pointer'
                                                         }}
-                                                        title={`${e.subjectName} (${e.subjectCode})\nClass: ${e.className}\nRoom: ${e.roomName}\nTime: ${slotDef.start}-${slotDef.end}`}
+                                                        title={`${e.subjectName} (${e.subjectCode})\nClass: ${e.className}\nRoom: ${e.roomName}\nTime: ${e.startTime}-${e.endTime}`}
                                                         onMouseEnter={ev => ev.currentTarget.style.transform = 'translateY(-2px)'}
                                                         onMouseLeave={ev => ev.currentTarget.style.transform = 'translateY(0)'}
                                                         >

@@ -30,28 +30,26 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// Helper: derive weeklyFrequency and duration from credits and type
-const deriveSubjectDefaults = (type, credits, weeklyFrequency, duration) => {
-    const creditsNum = parseInt(credits) || 0;
-    // 1 credit = 1 period per week; if credits provided, override weeklyFrequency
-    const freq = creditsNum > 0 ? creditsNum : (parseInt(weeklyFrequency) || 1);
-    // Default duration by type: lab/project = 2 consecutive, theory/elective = 1
+// Helper: derive totalHours and duration from type
+// totalHours = total semester hours (scheduler divides by 15 to get weekly periods)
+const deriveSubjectDefaults = (type, totalHours, duration) => {
+    const hours = parseInt(totalHours) || 15;
+    // Default duration by type: lab/project = 2 consecutive, theory/elective/non-academic = 1
     const defaultDuration = (type === 'lab' || type === 'project') ? 2 : 1;
     const dur = parseInt(duration) || defaultDuration;
-    return { weeklyFrequency: freq, duration: dur, credits: creditsNum };
+    return { totalHours: hours, duration: dur };
 };
 
 // POST /api/subjects
 router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
-        const { name, code, type, weeklyFrequency, credits, year, departmentId, duration } = req.body;
+        const { name, code, type, totalHours, year, departmentId, duration } = req.body;
         if (!name || !code || !type) return res.status(400).json({ error: 'Name, code, and type required' });
-        const derived = deriveSubjectDefaults(type, credits, weeklyFrequency, duration);
+        const derived = deriveSubjectDefaults(type, totalHours, duration);
         const sub = await Subject.create({
             id: `sub-${uuidv4().slice(0, 8)}`,
             name, code, type,
-            credits: derived.credits,
-            weeklyFrequency: derived.weeklyFrequency,
+            totalHours: derived.totalHours,
             year: year || 1,
             departmentId: departmentId || null,
             duration: derived.duration
@@ -65,12 +63,11 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
 // PUT /api/subjects/:id
 router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
-        const { type, credits, weeklyFrequency, duration } = req.body;
+        const { type, totalHours, duration } = req.body;
         let updateBody = { ...req.body };
-        if (type && (credits !== undefined || weeklyFrequency !== undefined)) {
-            const derived = deriveSubjectDefaults(type, credits, weeklyFrequency, duration);
-            updateBody.credits = derived.credits;
-            updateBody.weeklyFrequency = derived.weeklyFrequency;
+        if (type && totalHours !== undefined) {
+            const derived = deriveSubjectDefaults(type, totalHours, duration);
+            updateBody.totalHours = derived.totalHours;
             updateBody.duration = derived.duration;
         }
         const sub = await Subject.findOneAndUpdate(
@@ -140,8 +137,7 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
             const name = String(record.name || record['Course Name'] || record['Course Title'] || '').trim();
             const code = String(record.code || record['Course Code'] || '').trim();
             const typeRaw = String(record.type || record.Type || record['Type (Theory/Lab)'] || record['Type (Theory/Lab/Project/Elective)'] || '').trim().toLowerCase();
-            const creditsRaw = record.credits || record.Credits || record['Credits'] || record['Credit Hours'];
-            const weeklyFreq = parseInt(record.weeklyFrequency || record.WeeklyFrequency || record['Weekly Frequency']);
+            const totalHoursRaw = parseInt(record.totalHours || record.TotalHours || record['Total Hours'] || record.weeklyFrequency || record.WeeklyFrequency);
             const durationRaw = record.duration || record.Duration;
             const yearRaw = record.year || record.Year;
             const deptRaw = String(record.department || record.Department || record.departmentId || record.DepartmentId || '').trim();
@@ -153,7 +149,7 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
                 continue;
             }
 
-            // Validate type — handle all four types + variants
+            // Validate type — handle all types + variants
             let typeVal = 'theory';
             if (typeRaw.includes('lab')) {
                 typeVal = 'lab';
@@ -161,6 +157,8 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
                 typeVal = 'project';
             } else if (typeRaw.includes('elective')) {
                 typeVal = 'elective';
+            } else if (typeRaw.includes('non-academic') || typeRaw.includes('non academic')) {
+                typeVal = 'Non-Academic';
             } else if (typeRaw.includes('theory')) {
                 typeVal = 'theory';
             } else {
@@ -187,15 +185,13 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
             }
 
             try {
-                const creditsNum = parseInt(creditsRaw) || 0;
-                const derived = deriveSubjectDefaults(typeVal, creditsNum, weeklyFreq, durationRaw);
+                const derived = deriveSubjectDefaults(typeVal, totalHoursRaw, durationRaw);
                 await Subject.create({
                     id: `sub-${uuidv4().slice(0, 8)}`,
                     name: name,
                     code: code,
                     type: typeVal,
-                    credits: derived.credits,
-                    weeklyFrequency: derived.weeklyFrequency,
+                    totalHours: derived.totalHours,
                     year: parseYear(yearRaw),
                     departmentId: deptId,
                     duration: derived.duration

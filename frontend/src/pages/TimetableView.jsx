@@ -167,7 +167,7 @@ export default function TimetableView() {
                                     <tr key={slotIdx}>
                                         <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
                                         {days.map(day => (
-                                            <td key={day}><div className="timetable-slot break-slot">☕ Break</div></td>
+                                            <td key={day}><div className="timetable-slot break-slot">Break</div></td>
                                         ))}
                                     </tr>
                                 );
@@ -177,7 +177,7 @@ export default function TimetableView() {
                                     <tr key={slotIdx}>
                                         <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
                                         {days.map(day => (
-                                            <td key={day}><div className="timetable-slot lunch-slot">🍽️ Lunch</div></td>
+                                            <td key={day}><div className="timetable-slot lunch-slot">Lunch</div></td>
                                         ))}
                                     </tr>
                                 );
@@ -190,16 +190,31 @@ export default function TimetableView() {
                                         const key = `${day}-${slotIdx}`;
                                         const cellEntries = lookup[key] || [];
 
-                                        // Check if this slot is part of a lab that started earlier
-                                        const prevKey = `${day}-${slotIdx - 1}`;
-                                        const prevEntries = lookup[prevKey] || [];
-                                        const isLabContinuation = prevEntries.some(e => e.isLab);
-
-                                        if (cellEntries.length === 0 && isLabContinuation) {
-                                            return <td key={day} style={{ opacity: 0.5 }}><div className="timetable-slot lab" style={{ opacity: 0.6 }}><div className="slot-subject" style={{ fontSize: 10 }}>↕ Lab cont.</div></div></td>;
+                                        // Check if any multi-slot subject (Lab, Project, etc.) started earlier and covers this slot
+                                        let continuation = null;
+                                        for (let offset = 1; offset <= slotIdx; offset++) {
+                                            const earlierEntries = lookup[`${day}-${slotIdx - offset}`] || [];
+                                            continuation = earlierEntries.find(e => e.duration > offset);
+                                            if (continuation) break;
+                                        }
+ 
+                                        if (cellEntries.length === 0 && continuation) {
+                                            const typeClass = continuation.isLab ? 'lab' : (continuation.subjectType === 'project' ? 'project' : 'theory');
+                                            return (
+                                                <td key={day} style={{ verticalAlign: 'top', paddingTop: 0 }}>
+                                                    <div className={`timetable-slot ${typeClass}`} style={{ opacity: 0.7, borderTop: 'none', borderRadius: '0 0 4px 4px', minHeight: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <div className="slot-subject" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                                                            ↕ {continuation.subjectCode || 'cont.'}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            );
                                         }
 
                                         if (cellEntries.length === 0) {
+                                            if (slot.type === 'activity') {
+                                                return <td key={day}><div className="timetable-slot activity-slot">Activity Hour</div></td>;
+                                            }
                                             return <td key={day}></td>;
                                         }
 
@@ -219,15 +234,20 @@ export default function TimetableView() {
                                             <td key={day}>
                                                 <div
                                                     className={`timetable-slot ${entry.isLab ? 'lab' : 'theory'} ${swapMode && swapFirst === entry._idx ? 'swap-highlight' : ''}`}
+                                                    style={entry.isExtra ? { borderLeft: '3px solid #f59e0b', opacity: 0.88 } : undefined}
                                                     onClick={() => handleSlotClick(entry, entry._idx)}
                                                     title={[
                                                         `${entry.subjectName} (${entry.subjectCode})`,
                                                         `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
                                                         `Room: ${entry.roomName}`,
+                                                        entry.isExtra ? 'Extra session (gap-fill)' : '',
                                                         entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
                                                     ].filter(Boolean).join('\n')}
                                                 >
-                                                    <div className="slot-subject">{entry.subjectCode || entry.subjectName}</div>
+                                                    <div className="slot-subject">
+                                                        {entry.subjectCode || entry.subjectName}
+                                                        {entry.isExtra && <span style={{ fontSize: 9, marginLeft: 3, color: '#f59e0b', fontWeight: 700 }}>+</span>}
+                                                    </div>
                                                     <div className="slot-faculty">
                                                         {viewMode === 'class' ? entry.facultyName : entry.className}
                                                         {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
@@ -331,7 +351,6 @@ export default function TimetableView() {
                                         <tr>
                                             <th>Course Title</th>
                                             <th>Course Code</th>
-                                            <th>Credits</th>
                                             <th>Allocated Periods/Week</th>
                                             <th>Scheduling Notes</th>
                                         </tr>
@@ -341,7 +360,6 @@ export default function TimetableView() {
                                             <tr key={i}>
                                                 <td style={{ fontWeight: 600 }}>{row.courseTitle}</td>
                                                 <td><code style={{ fontSize: 12 }}>{row.courseCode}</code></td>
-                                                <td style={{ textAlign: 'center' }}>{row.credits > 0 ? row.credits : '—'}</td>
                                                 <td style={{ textAlign: 'center' }}>
                                                     <span style={{ background: '#ede9fe', color: '#6d28d9', padding: '2px 10px', borderRadius: 12, fontWeight: 600, fontSize: 13 }}>{row.allocatedPeriods}</span>
                                                 </td>
@@ -360,19 +378,7 @@ export default function TimetableView() {
                 <>{renderGrid()}</>
             )}
 
-            {/* Conflicts */}
-            {timetable?.conflicts?.length > 0 && (
-                <div style={{ marginTop: 24 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: 'var(--danger)' }}>⚠ Unresolved Conflicts ({timetable.conflicts.length})</h3>
-                    <div className="conflict-list">
-                        {timetable.conflicts.map((c, idx) => (
-                            <div key={idx} className="conflict-item">
-                                ⚠ <strong>{c.className || c.classId}</strong> — {c.subjectName || c.subjectId}: {c.reason}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+
         </div>
     );
 }

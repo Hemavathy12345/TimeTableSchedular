@@ -929,6 +929,16 @@ a:hover {
   color: #2e7d32;
 }
 
+.timetable-slot.activity-slot {
+  background: #f3e8ff;
+  text-align: center;
+  color: #6b21a8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
 .timetable-slot.swap-highlight {
   outline: 2px solid #1a73e8;
 }

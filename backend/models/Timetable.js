@@ -11,6 +11,7 @@ const timetableEntrySchema = new mongoose.Schema({
     duration: { type: Number, default: 1 },
     isLab: { type: Boolean, default: false },
     isFixed: { type: Boolean, default: false },
+    isExtra: { type: Boolean, default: false },
     isActivity: { type: Boolean, default: false },
     activityLabel: { type: String, default: null },
     schedulingNote: { type: String, default: null }
@@ -20,7 +21,10 @@ const conflictSchema = new mongoose.Schema({
     type: String,
     message: String,
     classId: { type: String, default: null },
-    subjectId: { type: String, default: null }
+    className: { type: String, default: null },
+    subjectId: { type: String, default: null },
+    subjectName: { type: String, default: null },
+    reason: { type: String, default: null }
 }, { _id: false });
 
 const timetableSchema = new mongoose.Schema({

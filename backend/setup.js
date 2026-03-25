@@ -46,16 +46,16 @@ const data = {
         { id: "room-008", name: "ECE Lab 2", type: "lab", capacity: 30, departmentId: "dept-002" }
     ],
     subjects: [
-        { id: "sub-001", name: "Data Structures", code: "CS201", type: "theory", weeklyFrequency: 4, year: 2, departmentId: "dept-001", duration: 1 },
-        { id: "sub-002", name: "Operating Systems", code: "CS301", type: "theory", weeklyFrequency: 3, year: 3, departmentId: "dept-001", duration: 1 },
-        { id: "sub-003", name: "DBMS", code: "CS202", type: "theory", weeklyFrequency: 3, year: 2, departmentId: "dept-001", duration: 1 },
-        { id: "sub-004", name: "DS Lab", code: "CS211", type: "lab", weeklyFrequency: 1, year: 2, departmentId: "dept-001", duration: 2 },
-        { id: "sub-005", name: "DBMS Lab", code: "CS212", type: "lab", weeklyFrequency: 1, year: 2, departmentId: "dept-001", duration: 2 },
-        { id: "sub-006", name: "Computer Networks", code: "CS302", type: "theory", weeklyFrequency: 3, year: 3, departmentId: "dept-001", duration: 1 },
-        { id: "sub-007", name: "Digital Electronics", code: "EC201", type: "theory", weeklyFrequency: 4, year: 2, departmentId: "dept-002", duration: 1 },
-        { id: "sub-008", name: "Signal Processing", code: "EC301", type: "theory", weeklyFrequency: 3, year: 3, departmentId: "dept-002", duration: 1 },
-        { id: "sub-009", name: "DE Lab", code: "EC211", type: "lab", weeklyFrequency: 1, year: 2, departmentId: "dept-002", duration: 2 },
-        { id: "sub-010", name: "Microprocessors", code: "EC202", type: "theory", weeklyFrequency: 3, year: 2, departmentId: "dept-002", duration: 1 }
+        { id: "sub-001", name: "Data Structures", code: "CS201", type: "theory", totalHours: 60, year: 2, departmentId: "dept-001", duration: 1 },
+        { id: "sub-002", name: "Operating Systems", code: "CS301", type: "theory", totalHours: 45, year: 3, departmentId: "dept-001", duration: 1 },
+        { id: "sub-003", name: "DBMS", code: "CS202", type: "theory", totalHours: 45, year: 2, departmentId: "dept-001", duration: 1 },
+        { id: "sub-004", name: "DS Lab", code: "CS211", type: "lab", totalHours: 30, year: 2, departmentId: "dept-001", duration: 2 },
+        { id: "sub-005", name: "DBMS Lab", code: "CS212", type: "lab", totalHours: 30, year: 2, departmentId: "dept-001", duration: 2 },
+        { id: "sub-006", name: "Computer Networks", code: "CS302", type: "theory", totalHours: 45, year: 3, departmentId: "dept-001", duration: 1 },
+        { id: "sub-007", name: "Digital Electronics", code: "EC201", type: "theory", totalHours: 60, year: 2, departmentId: "dept-002", duration: 1 },
+        { id: "sub-008", name: "Signal Processing", code: "EC301", type: "theory", totalHours: 45, year: 3, departmentId: "dept-002", duration: 1 },
+        { id: "sub-009", name: "DE Lab", code: "EC211", type: "lab", totalHours: 30, year: 2, departmentId: "dept-002", duration: 2 },
+        { id: "sub-010", name: "Microprocessors", code: "EC202", type: "theory", totalHours: 45, year: 2, departmentId: "dept-002", duration: 1 }
     ],
     classes: [
         { id: "cls-001", name: "CSE 2nd Year A", year: 2, section: "A", departmentId: "dept-001" },

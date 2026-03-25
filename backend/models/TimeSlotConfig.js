@@ -13,4 +13,4 @@ const timeSlotConfigSchema = new mongoose.Schema({
     slots: [slotSchema]
 }, { timestamps: true });
 
-export default mongoose.model('TimeSlotConfig', timeSlotConfigSchema);
+export default mongoose.model('TimeSlotConfig', timeSlotConfigSchema, 'timeslotconfigs');

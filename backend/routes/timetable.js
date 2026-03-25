@@ -183,8 +183,17 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
 
         const masterConfig = configs[0] || null;
 
+        console.log(`Faculty Overview Debug: tt.entries=${tt.entries.length}, configs=${configs.length}`);
         const enriched = tt.entries.map(e => {
             const cls = classes.find(c => c.id === e.classId);
+            const config = configs.find(c => Number(c.year) === Number(cls?.year));
+            const startSlot = config?.slots[e.slotIndex];
+            const endSlot = config?.slots[e.slotIndex + (e.duration || 1) - 1];
+
+            if (!startSlot) {
+                console.log(`  Warning: No slot found for class ${e.classId} (year ${cls?.year}), slotIndex ${e.slotIndex}`);
+            }
+
             return {
                 ...e,
                 subjectName: subjects.find(s => s.id === e.subjectId)?.name || '',
@@ -193,7 +202,9 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
                 classYear: cls?.year || '',
                 roomName: rooms.find(r => r.id === e.roomId)?.name || '',
                 facultyName: faculty.find(f => f.id === e.facultyId)?.name || '',
-                labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : ''
+                labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : '',
+                startTime: startSlot?.start || '',
+                endTime: endSlot?.end || ''
             };
         });
 
@@ -229,7 +240,7 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
         });
         facultySchedules.sort((a, b) => a.facultyName.localeCompare(b.facultyName));
 
-        res.json({ timetableName: tt.name, timeSlotConfig: masterConfig, facultySchedules });
+        res.json({ timetableName: tt.name, timeSlotConfig: masterConfig, timeSlotConfigs: configs, facultySchedules });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

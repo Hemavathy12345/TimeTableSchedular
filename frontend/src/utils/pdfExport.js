@@ -40,9 +40,9 @@ export function exportClassPDF(viewData) {
         const row = [`${slot.start} - ${slot.end}`];
 
         if (slot.type === 'break') {
-            days.forEach(() => row.push('☕ Break'));
+            days.forEach(() => row.push('Break'));
         } else if (slot.type === 'lunch') {
-            days.forEach(() => row.push('🍽️ Lunch'));
+            days.forEach(() => row.push('Lunch'));
         } else {
             for (const day of days) {
                 const entry = entries.find(e => e.day === day && e.slotIndex === slotIdx);
@@ -84,11 +84,11 @@ export function exportClassPDF(viewData) {
         didParseCell: function (data) {
             if (data.section === 'body') {
                 const text = data.cell.raw;
-                if (text === '☕ Break') {
+                if (text === 'Break') {
                     data.cell.styles.fillColor = [255, 247, 230];
                     data.cell.styles.textColor = [180, 130, 20];
                     data.cell.styles.halign = 'center';
-                } else if (text === '🍽️ Lunch') {
+                } else if (text === 'Lunch') {
                     data.cell.styles.fillColor = [230, 255, 240];
                     data.cell.styles.textColor = [20, 130, 60];
                     data.cell.styles.halign = 'center';
@@ -146,9 +146,9 @@ export function exportFacultyPDF(viewData) {
         const row = [`${slot.start} - ${slot.end}`];
 
         if (slot.type === 'break') {
-            days.forEach(() => row.push('☕ Break'));
+            days.forEach(() => row.push('Break'));
         } else if (slot.type === 'lunch') {
-            days.forEach(() => row.push('🍽️ Lunch'));
+            days.forEach(() => row.push('Lunch'));
         } else {
             for (const day of days) {
                 const entry = entries.find(e => e.day === day && e.slotIndex === slotIdx);
@@ -188,11 +188,11 @@ export function exportFacultyPDF(viewData) {
         didParseCell: function (data) {
             if (data.section === 'body') {
                 const text = data.cell.raw;
-                if (text === '☕ Break') {
+                if (text === 'Break') {
                     data.cell.styles.fillColor = [255, 247, 230];
                     data.cell.styles.textColor = [180, 130, 20];
                     data.cell.styles.halign = 'center';
-                } else if (text === '🍽️ Lunch') {
+                } else if (text === 'Lunch') {
                     data.cell.styles.fillColor = [230, 255, 240];
                     data.cell.styles.textColor = [20, 130, 60];
                     data.cell.styles.halign = 'center';

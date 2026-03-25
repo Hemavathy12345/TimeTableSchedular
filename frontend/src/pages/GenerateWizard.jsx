@@ -270,7 +270,7 @@ export default function GenerateWizard() {
                                                                         <span className={`badge ${sub.type === 'lab' ? 'badge-lab' : sub.type === 'theory' ? 'badge-theory' : sub.type === 'project' ? 'badge-project' : 'badge-elective'}`} style={{ marginRight: 6 }}>{sub.type}</span>
                                                                         {sub.name}
                                                                     </div>
-                                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{sub.code} ({sub.credits} cr)</div>
+                                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{sub.code}</div>
                                                                 </div>
                                                                 
                                                                 <div style={{ flex: '1 1 35%' }}>

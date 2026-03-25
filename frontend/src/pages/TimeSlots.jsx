@@ -15,14 +15,18 @@ export default function TimeSlots() {
         setConfigs(res.data);
     };
 
+
+
     useEffect(() => {
         const config = configs.find(c => c.year === selectedYear);
         if (config) {
-            setEditingConfig(JSON.parse(JSON.stringify(config)));
+            const data = JSON.parse(JSON.stringify(config));
+            if (!data.days.includes('Saturday')) data.days.push('Saturday');
+            setEditingConfig(data);
         } else {
             setEditingConfig({
                 year: selectedYear,
-                days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+                days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
                 slots: [
                     { start: '09:00', end: '09:50', type: 'class' },
                     { start: '09:50', end: '10:40', type: 'class' },
@@ -32,6 +36,8 @@ export default function TimeSlots() {
             });
         }
     }, [selectedYear, configs]);
+
+
 
     const addSlot = () => {
         if (!editingConfig) return;
@@ -54,10 +60,19 @@ export default function TimeSlots() {
 
     const save = async () => {
         try {
-            if (editingConfig.id) {
-                await api.put(`/timeslots/${editingConfig.id}`, editingConfig);
+            const configToSave = { 
+                ...editingConfig,
+                days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            };
+
+            if (configToSave.days.length === 0) {
+                addToast('Please select at least one day', 'error');
+                return;
+            }
+            if (configToSave.id) {
+                await api.put(`/timeslots/${configToSave.id}`, configToSave);
             } else {
-                await api.post('/timeslots', editingConfig);
+                await api.post('/timeslots', configToSave);
             }
             addToast(`Year ${selectedYear} time slots saved`);
             load();
@@ -79,7 +94,7 @@ export default function TimeSlots() {
             <div className="table-header">
                 <div>
                     <h1 className="page-title">Time Slot Configuration</h1>
-                    <p className="page-subtitle">Configure staggered timings for each year level</p>
+                    <p className="page-subtitle">Configure staggered timings and working days for each year level</p>
                 </div>
                 <button className="btn btn-primary" onClick={save}>Save Configuration</button>
             </div>
@@ -97,61 +112,66 @@ export default function TimeSlots() {
             </div>
 
             {editingConfig && (
-                <div className="card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <h2 style={{ fontSize: 18, fontWeight: 600 }}>Year {selectedYear} Schedule</h2>
-                        <button className="btn btn-secondary btn-sm" onClick={addSlot}>+ Add Slot</button>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {editingConfig.slots.map((slot, idx) => (
-                            <div key={idx} style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 12,
-                                padding: '10px 16px',
-                                background: 'var(--glass-bg)',
-                                border: `1px solid var(--glass-border)`,
-                                borderLeft: `4px solid ${getSlotColor(slot.type)}`,
-                                borderRadius: 'var(--radius-md)',
-                            }}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', width: 30 }}>#{idx + 1}</span>
-                                <input
-                                    type="time"
-                                    className="form-input"
-                                    style={{ width: 120 }}
-                                    value={slot.start}
-                                    onChange={e => updateSlot(idx, 'start', e.target.value)}
-                                />
-                                <span style={{ color: 'var(--text-muted)' }}>to</span>
-                                <input
-                                    type="time"
-                                    className="form-input"
-                                    style={{ width: 120 }}
-                                    value={slot.end}
-                                    onChange={e => updateSlot(idx, 'end', e.target.value)}
-                                />
-                                <select
-                                    className="form-select"
-                                    style={{ width: 120 }}
-                                    value={slot.type}
-                                    onChange={e => updateSlot(idx, 'type', e.target.value)}
-                                >
-                                    <option value="class">Class</option>
-                                    <option value="break">Break</option>
-                                    <option value="lunch">Lunch</option>
-                                    <option value="activity">Activity Hour</option>
-                                </select>
-                                <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeSlot(idx)}>×</button>
-                            </div>
-                        ))}
-                    </div>
 
-                    {editingConfig.slots.length === 0 && (
-                        <div className="empty-state">
-                            <p>No slots configured. Click "Add Slot" to start.</p>
+
+                    <div className="card">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                            <h2 style={{ fontSize: 18, fontWeight: 600 }}>Year {selectedYear} Periods</h2>
+                            <button className="btn btn-secondary btn-sm" onClick={addSlot}>+ Add Slot</button>
                         </div>
-                    )}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {editingConfig.slots.map((slot, idx) => (
+                                <div key={idx} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: '10px 16px',
+                                    background: 'var(--glass-bg)',
+                                    border: `1px solid var(--glass-border)`,
+                                    borderLeft: `4px solid ${getSlotColor(slot.type)}`,
+                                    borderRadius: 'var(--radius-md)',
+                                }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', width: 30 }}>#{idx + 1}</span>
+                                    <input
+                                        type="time"
+                                        className="form-input"
+                                        style={{ width: 120 }}
+                                        value={slot.start}
+                                        onChange={e => updateSlot(idx, 'start', e.target.value)}
+                                    />
+                                    <span style={{ color: 'var(--text-muted)' }}>to</span>
+                                    <input
+                                        type="time"
+                                        className="form-input"
+                                        style={{ width: 120 }}
+                                        value={slot.end}
+                                        onChange={e => updateSlot(idx, 'end', e.target.value)}
+                                    />
+                                    <select
+                                        className="form-select"
+                                        style={{ width: 120 }}
+                                        value={slot.type}
+                                        onChange={e => updateSlot(idx, 'type', e.target.value)}
+                                    >
+                                        <option value="class">Class</option>
+                                        <option value="break">Break</option>
+                                        <option value="lunch">Lunch</option>
+                                        <option value="activity">Activity Hour</option>
+                                    </select>
+                                    <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeSlot(idx)}>×</button>
+                                </div>
+                            ))}
+                        </div>
+
+                        {editingConfig.slots.length === 0 && (
+                            <div className="empty-state">
+                                <p>No slots configured. Click "Add Slot" to start.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

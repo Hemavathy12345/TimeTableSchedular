@@ -37,6 +37,10 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
         // Remove existing config for this year
         await TimeSlotConfig.deleteMany({ year });
 
+        if (!days.includes('Saturday')) {
+            days.push('Saturday');
+        }
+
         const config = await TimeSlotConfig.create({
             id: `ts-${uuidv4().slice(0, 8)}`,
             year, days, slots
@@ -50,9 +54,14 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
 // PUT /api/timeslots/:id
 router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
+        const updateData = req.body;
+        if (updateData.days && !updateData.days.includes('Saturday')) {
+            updateData.days.push('Saturday');
+        }
+
         const config = await TimeSlotConfig.findOneAndUpdate(
             { id: req.params.id },
-            { $set: req.body },
+            { $set: updateData },
             { new: true, lean: true }
         );
         if (!config) return res.status(404).json({ error: 'Time slot config not found' });
