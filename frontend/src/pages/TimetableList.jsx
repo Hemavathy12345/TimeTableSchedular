@@ -30,7 +30,7 @@ export default function TimetableList() {
                     <h1 className="page-title">Generated Timetables</h1>
                     <p className="page-subtitle">View and manage generated timetables</p>
                 </div>
-                <a href="/generate" className="btn btn-primary">⚡ Generate New</a>
+                <a href="/generate" className="btn btn-primary">Generate New</a>
             </div>
 
             {timetables.length === 0 ? (
@@ -59,7 +59,7 @@ export default function TimetableList() {
                             </div>
                             <div className="btn-group">
                                 <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); navigate(`/timetable/${tt.id}`); }}>View →</button>
-                                <button className="btn btn-danger btn-sm" onClick={e => { e.stopPropagation(); remove(tt.id); }}>🗑</button>
+                                <button className="btn btn-danger btn-sm" onClick={e => { e.stopPropagation(); remove(tt.id); }}>Delete</button>
                             </div>
                         </div>
                     ))}

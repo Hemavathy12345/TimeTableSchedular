@@ -1,14 +1,9 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { NavLink } from 'react-router-dom';
 
 export default function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
-    const { user, logout } = useAuth();
-    const location = useLocation();
 
-    const isAdmin = user?.role === 'admin';
-    const isFaculty = user?.role === 'faculty';
 
     const navItems = [
         { path: '/dashboard', label: 'Dashboard', roles: ['admin', 'faculty', 'student'] },
@@ -24,7 +19,7 @@ export default function Sidebar() {
         { path: '/timetables', label: 'View Timetables', roles: ['admin', 'faculty', 'student'] },
     ];
 
-    const filteredItems = navItems.filter(item => item.roles.includes(user?.role));
+    const filteredItems = navItems;
 
     return (
         <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -63,25 +58,7 @@ export default function Sidebar() {
                     );
                 })}
             </nav>
-
-            <div className="sidebar-footer">
-                <div className="sidebar-user">
-                    <div className="sidebar-avatar">
-                        {user?.name?.charAt(0) || 'U'}
-                    </div>
-                    {!collapsed && (
-                        <div className="sidebar-user-info">
-                            <div className="sidebar-user-name">{user?.name}</div>
-                            <div className="sidebar-user-role">{user?.role}</div>
-                        </div>
-                    )}
-                </div>
-                {!collapsed && (
-                    <button className="sidebar-logout" onClick={logout}>
-                        ↪ Sign Out
-                    </button>
-                )}
-            </div>
         </aside>
     );
 }
+

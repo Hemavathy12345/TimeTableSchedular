@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import connectDB from './db.js';
-import authRoutes from './routes/auth.js';
+/* import authRoutes from './routes/auth.js'; */
 import departmentRoutes from './routes/departments.js';
 import facultyRoutes from './routes/faculty.js';
 import roomRoutes from './routes/rooms.js';
@@ -18,7 +18,7 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // Routes
-app.use('/api/auth', authRoutes);
+// app.use('/api/auth', authRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/faculty', facultyRoutes);
 app.use('/api/rooms', roomRoutes);

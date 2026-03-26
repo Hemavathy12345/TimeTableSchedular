@@ -67,8 +67,8 @@ export default function Rooms() {
                                 <td>{deptName(r.departmentId)}</td>
                                 <td>
                                     <div className="table-actions">
-                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button>
-                                        <button className="btn btn-danger btn-sm" onClick={() => remove(r.id)}>🗑</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>Edit</button>
+                                        <button className="btn btn-danger btn-sm" onClick={() => remove(r.id)}>Delete</button>
                                     </div>
                                 </td>
                             </tr>

@@ -1,175 +1,339 @@
+/**
+ * Timetable Generation Engine
+ *
+ * PHASES:
+ *   1. Fixed placement      — Pin user-defined sessions
+ *   2. Task building        — Compute required sessions per mapping
+ *   3. Task ordering (MRV)  — Hardest-to-fit sessions scheduled first
+ *   4. Greedy placement     — Hard + soft constraints enforced
+ *   5. Relaxed placement    — Soft constraints dropped; hard kept
+ *   6. Swap repair          — Depth-1 backtracking via targeted eviction
+ *   7. Gap fill             — Round-robin extra sessions in empty slots
+ *
+ * HARD CONSTRAINTS (always enforced):
+ *   HC1  No faculty double-booking (primary faculty and lab co-faculty)
+ *   HC2  No room double-booking
+ *   HC3  No class double-booking
+ *   HC4  Multi-period subjects require consecutive class-type slots
+ *   HC5  Lab subjects use lab rooms; all other subjects use classrooms
+ *
+ * SOFT CONSTRAINTS:
+ *   SC1  At most MAX_SAME_SUBJECT_PER_DAY periods of the same subject per class per day
+ *         — Phase 4: enforced  |  Phases 5-6: dropped  |  Phase 7: tried first, relaxed if needed
+ *   SC2  At most one lab/project block per class per day (Phase 4 only; dropped in Phases 5-7)
+ */
 
 const SEMESTER_WEEKS = 15;
+const MAX_SAME_SUBJECT_PER_DAY = 2;
 
-/** Convert total semester hours → weekly periods */
-const weeklyPeriods = (subject) => Math.ceil((subject.totalHours || 1) / SEMESTER_WEEKS);
+const PRIORITY = {
+    lab: 1,
+    project: 2,
+    theory: 3,
+    elective: 4,
+    'Non-Academic': 5,
+    activity: 6
+};
 
-/**
- * Scheduling priority — lower number = place first.
- * Multi-slot blocks (lab, project) are placed before single-slot subjects
- * because they have fewer valid starting positions (harder to fit).
- */
-const PRIORITY_MAP = { lab: 1, project: 2, theory: 3, elective: 4, 'Non-Academic': 5, activity: 6 };
+// --- Occupancy helpers -------------------------------------------------------
 
-// ─── Occupancy helpers ────────────────────────────────────────────────────────
-const getKey     = (day, slotIdx) => `${day}-${slotIdx}`;
+const slotKey    = (day, idx) => `${day}-${idx}`;
 const isOccupied = (map, key, id) => !!(map[key] && map[key].has(id));
 const occupy     = (map, key, id) => { if (!map[key]) map[key] = new Set(); map[key].add(id); };
-const unoccupy   = (map, key, id) => { if (map[key]) map[key].delete(id); };
+const release    = (map, key, id) => { if (map[key]) map[key].delete(id); };
 
-// ─── Main entry point ─────────────────────────────────────────────────────────
+// Time-based occupancy helpers for mixed-schedule school systems
+const timeToMins = (h, m) => h * 60 + m;
+const timeStrMins = (str) => {
+    if (!str) return 0;
+    const [h, m] = str.split(':').map(Number);
+    return timeToMins(h, m);
+};
+
+// Map structure for time based checks: maps.facultyTime[day][id] = [{s, e}, ...]
+function checkTimeOverlap(reg, day, id, start, end) {
+    if (!reg[day] || !reg[day][id]) return false;
+    return reg[day][id].some(block => start < block.e && end > block.s);
+}
+
+function occupyTime(reg, day, id, start, end) {
+    if (!reg[day]) reg[day] = {};
+    if (!reg[day][id]) reg[day][id] = [];
+    reg[day][id].push({ s: start, e: end });
+}
+
+function releaseTime(reg, day, id, start, end) {
+    if (!reg[day] || !reg[day][id]) return;
+    reg[day][id] = reg[day][id].filter(block => !(block.s === start && block.e === end));
+}
+
+function occupyBlock(maps, day, slotIndex, duration, ids, config) {
+    // Current class slot details
+    const slots = config ? (config.slots.toObject ? config.slots.toObject() : config.slots) : [];
+    const startTimeStr = slots[slotIndex]?.start;
+    const endTimeStr = slots[slotIndex + duration - 1]?.end;
+    const startM = timeStrMins(startTimeStr);
+    const endM = timeStrMins(endTimeStr);
+
+    for (let i = 0; i < duration; i++) {
+        const k = slotKey(day, slotIndex + i);
+        // Use Index-based for Class (class is always self-consistent)
+        if (ids.classId) occupy(maps.class, k, ids.classId);
+        
+        // Use Time-based for Global Resources (Faculty, Room) to catch mixed-schedule overlaps
+        if (ids.facultyId && startM > 0) occupyTime(maps.faculty, day, ids.facultyId, startM, endM);
+        if (ids.labFaculty2Id && startM > 0) occupyTime(maps.faculty, day, ids.labFaculty2Id, startM, endM);
+        if (ids.roomId && startM > 0) occupyTime(maps.room, day, ids.roomId, startM, endM);
+    }
+}
+
+function releaseBlock(maps, day, slotIndex, duration, ids, config) {
+    const slots = config ? (config.slots.toObject ? config.slots.toObject() : config.slots) : [];
+    const startTimeStr = slots[slotIndex]?.start;
+    const endTimeStr = slots[slotIndex + duration - 1]?.end;
+    const startM = timeStrMins(startTimeStr);
+    const endM = timeStrMins(endTimeStr);
+
+    for (let i = 0; i < duration; i++) {
+        const k = slotKey(day, slotIndex + i);
+        if (ids.classId) release(maps.class, k, ids.classId);
+        if (ids.facultyId && startM > 0) releaseTime(maps.faculty, day, ids.facultyId, startM, endM);
+        if (ids.labFaculty2Id && startM > 0) releaseTime(maps.faculty, day, ids.labFaculty2Id, startM, endM);
+        if (ids.roomId && startM > 0) releaseTime(maps.room, day, ids.roomId, startM, endM);
+    }
+}
+
+// --- Time-slot helpers -------------------------------------------------------
+
+const getRawSlots      = (cfg) => cfg.slots.toObject ? cfg.slots.toObject() : cfg.slots;
+const getClassTypeSlots = (cfg) =>
+    getRawSlots(cfg).map((s, i) => ({ ...s, index: i })).filter(s => s.type === 'class');
+
+// --- Period calculation ------------------------------------------------------
+
+const periodsPerWeek = (subject) =>
+    Math.max(1, Math.ceil((subject.totalHours || 1) / SEMESTER_WEEKS));
+
+// --- Room finder -------------------------------------------------------------
+
+/**
+ * Find an available room of the correct type for `duration` consecutive slots.
+ * Classroom preference: (1) class default room, (2) same-dept room, (3) any room
+ * Lab preference:       (1) same-dept lab,      (2) any lab
+ */
+function findRoom(rooms, subject, day, slotIndex, roomMap, cls, duration, config) {
+    const needsLab = subject.type === 'lab';
+    const roomType = needsLab ? 'lab' : 'classroom';
+
+    const slots = config ? (config.slots.toObject ? config.slots.toObject() : config.slots) : [];
+    const startTimeStr = slots[slotIndex]?.start;
+    const endTimeStr = slots[slotIndex + duration - 1]?.end;
+    const startM = timeStrMins(startTimeStr);
+    const endM = timeStrMins(endTimeStr);
+
+    const freeForBlock = (roomId) => {
+        if (!startM) return true; // Fallback if times missing
+        return !checkTimeOverlap(roomMap, day, roomId, startM, endM);
+    };
+
+    if (!needsLab) {
+        if (cls && cls.defaultRoomId) {
+            const def = rooms.find(r => r.id === cls.defaultRoomId);
+            if (def && freeForBlock(def.id)) return def;
+        }
+        const deptRoom = rooms.find(r => r.type === 'classroom' && r.departmentId === subject.departmentId && freeForBlock(r.id));
+        if (deptRoom) return deptRoom;
+        return rooms.find(r => r.type === 'classroom' && freeForBlock(r.id)) || null;
+    }
+
+    return (
+        rooms.find(r => r.type === 'lab' && r.departmentId === subject.departmentId && freeForBlock(r.id)) ||
+        rooms.find(r => r.type === 'lab' && freeForBlock(r.id)) ||
+        null
+    );
+}
+
+// --- Entry & note builders ---------------------------------------------------
+
+/**
+ * Build a normalized timetable entry.
+ * Centralises all field defaults for consistency across phases.
+ */
+function makeEntry({ classId, subjectId, facultyId, labFaculty2Id, roomId,
+                     day, slotIndex, duration, subjectType,
+                     isFixed, isExtra, schedulingNote }) {
+    return {
+        classId,
+        subjectId,
+        facultyId,
+        labFaculty2Id:  labFaculty2Id  || null,
+        roomId:         roomId         || null,
+        day,
+        slotIndex,
+        duration:       duration  || 1,
+        isLab:          subjectType === 'lab',
+        subjectType:    subjectType || null,
+        isFixed:        !!isFixed,
+        isExtra:        !!isExtra,
+        isActivity:     subjectType === 'activity',
+        schedulingNote: schedulingNote || null
+    };
+}
+
+function buildNote(subjectType, duration, flags) {
+    flags = flags || {};
+    const base = {
+        lab:            'Lab: ' + duration + '-slot consecutive block',
+        project:        'Project: ' + duration + '-slot consecutive block',
+        theory:         'Theory: spread across week',
+        elective:       'Elective: spread across week',
+        'Non-Academic': 'Non-Academic: spread across week',
+        activity:       'Activity session'
+    }[subjectType] || 'Session';
+
+    const parts = [];
+    if (flags.relaxed)    parts.push('constraint-relaxed');
+    if (flags.swapRepair) parts.push('swap-repaired');
+    if (flags.extra)      parts.push('gap-fill');
+
+    return parts.length ? base + '; ' + parts.join('; ') : base;
+}
+
+// --- Main entry point --------------------------------------------------------
+
+/**
+ * Generate a complete timetable from the supplied data.
+ * @param {object} data
+ * @param {object[]} data.classes
+ * @param {object[]} data.subjects
+ * @param {object[]} data.rooms
+ * @param {object[]} data.timeSlotConfigs
+ * @param {object[]} data.defaultClasses
+ * @param {object[]} data.facultySubjectMapping
+ * @returns {{ entries: object[], conflicts: object[] }}
+ */
 export function generateTimetable(data) {
     const { classes, subjects, rooms, timeSlotConfigs, defaultClasses, facultySubjectMapping } = data;
 
-    const entries          = [];
-    const conflicts        = [];
-    const facultyOccupancy = {};
-    const roomOccupancy    = {};
-    const classOccupancy   = {};
-    const occupancies      = { faculty: facultyOccupancy, room: roomOccupancy, class: classOccupancy };
+    const subjectById  = {};
+    const classById    = {};
+    const configByYear = {};
+    for (const s of subjects)       subjectById[s.id]            = s;
+    for (const c of classes)        classById[c.id]              = c;
+    for (const cfg of timeSlotConfigs) configByYear[Number(cfg.year)] = cfg;
 
-    const getSlotConfig = (year) =>
-        timeSlotConfigs.find(c => c.year === year) || timeSlotConfigs[0];
-
+    const getSlotConfig = (year) => configByYear[Number(year)] || timeSlotConfigs[0] || null;
     const getClassSlots = (year) => {
-        const config = getSlotConfig(year);
-        if (!config) return [];
-        const arr = config.slots.toObject ? config.slots.toObject() : config.slots;
-        return arr.map((s, i) => ({ type: s.type, index: i })).filter(s => s.type === 'class');
+        const cfg = getSlotConfig(year);
+        return cfg ? getClassTypeSlots(cfg) : [];
     };
 
-    // ─── Phase 1: Place fixed/default classes ─────────────────────────────────
-    for (const dc of defaultClasses) {
-        const mapping = facultySubjectMapping.find(
-            m => m.subjectId === dc.subjectId && m.classId === dc.classId
-        );
-        if (!mapping) continue;
+    // --- Advisor Override ---------------------------------------------------
+    // "Library" and "Tutor Ward Meeting" are defaulted to the Class Advisor
+    const mappings = facultySubjectMapping.map(m => {
+        const cls = classById[m.classId];
+        const subject = subjectById[m.subjectId];
+        const name = subject?.name?.toLowerCase();
+        if (cls?.advisorId && (name === 'library' || name === 'tutor ward meeting')) {
+            return { ...m, facultyId: cls.advisorId };
+        }
+        return m;
+    });
 
-        const subject = subjects.find(s => s.id === dc.subjectId);
-        const cls     = classes.find(c => c.id === dc.classId);
-        if (!subject || !cls) continue;
+    const entries   = [];
+    const conflicts = [];
+    const maps      = { faculty: {}, room: {}, class: {} };
 
-        const dur  = subject.duration || 1;
-        const room = findRoom(rooms, subject, dc.day, dc.slotIndex, roomOccupancy, cls, dur);
+    // --- Phase 1: Fixed / pinned entries ------------------------------------
+    for (const dc of (defaultClasses || [])) {
+        const mapping = mappings.find(m => m.subjectId === dc.subjectId && m.classId === dc.classId);
+        const subject = subjectById[dc.subjectId];
+        const cls     = classById[dc.classId];
+        if (!mapping || !subject || !cls) continue;
+
+        const duration = subject.duration || 1;
+        const config   = getSlotConfig(cls.year);
+        const room     = findRoom(rooms, subject, dc.day, dc.slotIndex, maps.room, cls, duration, config);
         if (!room) continue;
 
-        entries.push({
-            classId:       dc.classId,
-            subjectId:     dc.subjectId,
-            facultyId:     mapping.facultyId,
-            roomId:        room.id,
-            day:           dc.day,
-            slotIndex:     dc.slotIndex,
-            isLab:         subject.type === 'lab',
-            labFaculty2Id: mapping.labFaculty2Id || null,
-            isFixed:       true,
-            duration:      dur,
-            schedulingNote: buildNote(subject, false)
-        });
-
-        for (let d = 0; d < dur; d++) {
-            const key = getKey(dc.day, dc.slotIndex + d);
-            occupy(facultyOccupancy, key, mapping.facultyId);
-            occupy(roomOccupancy,    key, room.id);
-            occupy(classOccupancy,   key, dc.classId);
-            if (mapping.labFaculty2Id) occupy(facultyOccupancy, key, mapping.labFaculty2Id);
-        }
+        entries.push(makeEntry({
+            classId:        dc.classId,
+            subjectId:      dc.subjectId,
+            facultyId:      mapping.facultyId,
+            labFaculty2Id:  mapping.labFaculty2Id,
+            roomId:         room.id,
+            day:            dc.day,
+            slotIndex:      dc.slotIndex,
+            duration,
+            subjectType:    subject.type,
+            isFixed:        true,
+            schedulingNote: buildNote(subject.type, duration)
+        }));
+        occupyBlock(maps, dc.day, dc.slotIndex, duration, {
+            facultyId: mapping.facultyId, labFaculty2Id: mapping.labFaculty2Id,
+            roomId: room.id, classId: dc.classId
+        }, config);
     }
 
-    // ─── Phase 2: Build task list ──────────────────────────────────────────────
-    // Each task = one session of a subject that still needs to be placed.
+    // --- Phase 2: Build task list -------------------------------------------
     const tasks = [];
-    for (const mapping of facultySubjectMapping) {
-        const subject = subjects.find(s => s.id === mapping.subjectId);
-        const cls     = classes.find(c => c.id === mapping.classId);
+    for (const mapping of mappings) {
+        const subject = subjectById[mapping.subjectId];
+        const cls     = classById[mapping.classId];
         if (!subject || !cls) continue;
 
         const alreadyPlaced = entries
             .filter(e => e.classId === mapping.classId && e.subjectId === mapping.subjectId)
             .reduce((sum, e) => sum + (e.duration || 1), 0);
 
-        const remaining   = weeklyPeriods(subject) - alreadyPlaced;
+        const remaining = periodsPerWeek(subject) - alreadyPlaced;
         if (remaining <= 0) continue;
 
-        const dur         = subject.duration || 1;
-        const numSessions = Math.ceil(remaining / dur);
-
-        for (let i = 0; i < numSessions; i++) {
-            const sessionDur = (i === numSessions - 1 && remaining % dur !== 0)
-                ? (remaining % dur)
-                : dur;
-            tasks.push({ mapping, subject: { ...subject, duration: sessionDur }, cls });
+        const baseDur   = subject.duration || 1;
+        const sessions  = Math.ceil(remaining / baseDur);
+        for (let i = 0; i < sessions; i++) {
+            const dur = (i === sessions - 1 && remaining % baseDur !== 0) ? (remaining % baseDur) : baseDur;
+            tasks.push({ mapping, subject: { ...subject, duration: dur }, cls });
         }
     }
 
-    // ─── Phase 3: Order tasks — MRV heuristic (most constrained first) ─────────
-    //
-    // Ordering rules (in priority):
-    //   1. Subject type priority  (lab → project → theory → elective → Non-Academic)
-    //   2. Session duration       (longer blocks have fewer valid starting positions)
-    //   3. Weekly periods needed  (more periods = more sessions to squeeze in)
-    //
-    // This approximates the Minimum Remaining Values (MRV) heuristic from CSP
-    // theory: schedule the variable with the fewest legal values first, so
-    // constraint violations are detected early and easy tasks fill open slots last.
+    // --- Phase 3: Sort tasks (MRV heuristic) --------------------------------
+    // Harder-to-fit sessions go first: labs > projects > theory > elective ...
+    // Within same type: longer duration first, then more required periods first.
     tasks.sort((a, b) => {
-        const aPri = PRIORITY_MAP[a.subject.type] ?? 5;
-        const bPri = PRIORITY_MAP[b.subject.type] ?? 5;
-        if (aPri !== bPri) return aPri - bPri;
-
-        const aDur = a.subject.duration ?? 1;
-        const bDur = b.subject.duration ?? 1;
-        if (bDur !== aDur) return bDur - aDur;   // longer duration first
-
-        return weeklyPeriods(b.subject) - weeklyPeriods(a.subject); // more periods first
+        const pd = (PRIORITY[a.subject.type] || 99) - (PRIORITY[b.subject.type] || 99);
+        if (pd !== 0) return pd;
+        const dd = (b.subject.duration || 1) - (a.subject.duration || 1);
+        if (dd !== 0) return dd;
+        return periodsPerWeek(b.subject) - periodsPerWeek(a.subject);
     });
 
-    // ─── Phase 4: Greedy placement (hard + soft constraints) ──────────────────
-    const unplacedAfterGreedy = [];
+    // --- Phase 4: Greedy placement (all constraints) ------------------------
+    const unplacedPass1 = [];
     for (const task of tasks) {
-        const placed = placeTask(
-            task, entries, occupancies, subjects, rooms,
-            getSlotConfig, getClassSlots, false /* relaxed = false */
-        );
-        if (!placed) unplacedAfterGreedy.push(task);
+        if (!placeTask(task, entries, maps, rooms, getSlotConfig, getClassSlots, false))
+            unplacedPass1.push(task);
     }
 
-    // ─── Phase 5: Retry with relaxed soft constraints ─────────────────────────
-    // Soft constraints dropped: max-2-theory-per-day and no-two-blocks-per-day.
-    // Hard constraints (no double-booking) are NEVER relaxed.
-    const unplacedAfterRelax = [];
-    for (const task of unplacedAfterGreedy) {
-        const placed = placeTask(
-            task, entries, occupancies, subjects, rooms,
-            getSlotConfig, getClassSlots, true /* relaxed = true */
-        );
-        if (!placed) unplacedAfterRelax.push(task);
+    // --- Phase 5: Retry with soft constraints relaxed -----------------------
+    const unplacedPass2 = [];
+    for (const task of unplacedPass1) {
+        if (!placeTask(task, entries, maps, rooms, getSlotConfig, getClassSlots, true))
+            unplacedPass2.push(task);
     }
 
-    // ─── Phase 6: Swap-based repair (depth-1 backtracking) ────────────────────
-    // For each still-unplaced task, try to evict a movable entry from a slot
-    // that our task could use, then re-place that entry elsewhere.
-    // This is the key improvement over the old algorithm: instead of giving up
-    // or over-filling, we make one targeted swap to create room.
-    const finalUnplaced = [];
-    for (const task of unplacedAfterRelax) {
-        const placed = swapRepair(
-            task, entries, occupancies, subjects, classes, rooms,
-            getSlotConfig, getClassSlots
-        );
-        if (!placed) finalUnplaced.push(task);
+    // --- Phase 6: Swap-based repair -----------------------------------------
+    const unplacedFinal = [];
+    for (const task of unplacedPass2) {
+        if (!swapRepair(task, entries, maps, subjects, classes, rooms, getSlotConfig, getClassSlots))
+            unplacedFinal.push(task);
     }
 
-    // ─── Phase 7: Fill remaining free slots ───────────────────────────────────
-    // After all required sessions are placed, scan every remaining empty
-    // class-type slot and fill it with an extra session of the
-    // highest-priority subject whose faculty and room are free.
-    // This guarantees no free periods remain in the timetable.
-    fillFreeSlots(entries, occupancies, classes, subjects, rooms,
-                  facultySubjectMapping, getSlotConfig, getClassSlots);
+    // --- Phase 7: Fill remaining free slots ---------------------------------
+    fillFreeSlots(entries, maps, classes, subjects, rooms, mappings, getSlotConfig);
 
-    // ─── Report truly unplaceable tasks ───────────────────────────────────────
-    for (const { cls, subject } of finalUnplaced) {
+    // --- Report unresolvable sessions ---------------------------------------
+    for (const { cls, subject } of unplacedFinal) {
         conflicts.push({
             classId:     cls.id,
             className:   cls.name,
@@ -182,569 +346,509 @@ export function generateTimetable(data) {
     return { entries, conflicts };
 }
 
-// ─── Phase 4 / 5: Place a single task ─────────────────────────────────────────
+// --- Phase 4/5: Place a single task -----------------------------------------
 /**
- * Try to place one session of a subject into the timetable.
+ * Try to place one session into the timetable.
  *
- * Hard constraints (always enforced):
- *   - No class double-booking
- *   - No faculty double-booking
- *   - Consecutive class-type slots must exist for multi-slot subjects
+ * Hard constraints (HC, always enforced):
+ *   HC1  No faculty double-booking
+ *   HC2  No room double-booking  (via findRoom)
+ *   HC3  No class double-booking
+ *   HC4  duration consecutive class-type slots must exist
+ *   HC5  Correct room type      (via findRoom)
  *
- * Soft constraints (enforced when relaxed=false, dropped when relaxed=true):
- *   - Theory/elective: at most 2 periods of the same subject per day per class
- *   - Lab/project: at most one block-type session per day per class
+ * Soft constraints (SC, enforced only when relaxed=false):
+ *   SC1  <= MAX_SAME_SUBJECT_PER_DAY periods of same subject per day (theory/elective/Non-Academic)
+ *   SC2  <= 1 lab/project block per class per day
  *
- * Placement preferences (slot ordering heuristics):
- *   - Labs/projects → prefer later slots in the day
- *   - Theory/elective → prefer less-loaded slots (fewest uses across the week), earlier as tiebreaker
- *   - All types → prefer lighter days (fewest total entries for this class), subject-spread as tiebreaker
- *   - Projects → prefer Saturday
+ * Heuristics (always applied, influence slot ordering):
+ *   H1  Prefer lighter days (fewer total entries for this class)
+ *   H2  Prefer days where this subject hasn't appeared yet
+ *   H3  Labs/projects prefer later slots in the day
+ *   H4  Theory/elective prefer less-loaded slot indices
+ *   H5  Projects prefer Saturday
+ *
+ * @returns {boolean} true if placed successfully
  */
-function placeTask(task, entries, { faculty: fOcc, room: rOcc, class: cOcc },
-                   subjects, rooms, getSlotConfig, getClassSlots, relaxed) {
+function placeTask(task, entries, maps, rooms, getSlotConfig, getClassSlots, relaxed) {
     const { mapping, subject, cls } = task;
-    const config     = getSlotConfig(cls.year);
-    if (!config)     return false;
+    const config = getSlotConfig(cls.year);
+    if (!config) return false;
 
-    const classSlots  = getClassSlots(cls.year);
-    const days        = config.days;
-    const slotsNeeded = subject.duration || 1;
-    const slotsArr    = config.slots.toObject ? config.slots.toObject() : config.slots;
+    const duration   = subject.duration || 1;
+    const rawSlots   = getRawSlots(config);
+    const classSlots = getClassSlots(cls.year);
+    const days       = config.days;
 
     const isTheoryLike = ['theory', 'elective', 'Non-Academic'].includes(subject.type);
-    const isBlockType  = ['lab', 'project'].includes(subject.type);
-    const isProject    = subject.type === 'project';
+    const isBlock      = subject.type === 'lab' || subject.type === 'project';
 
-    // Per-day occurrence count for this subject+class (used by soft constraints)
+    // Count how many times this subject already appears per day (for SC1)
     const dayCount = {};
-    entries
-        .filter(e => e.classId === cls.id && e.subjectId === subject.id)
-        .forEach(e => { dayCount[e.day] = (dayCount[e.day] || 0) + 1; });
+    for (const e of entries) {
+        if (e.classId === cls.id && e.subjectId === subject.id) {
+            dayCount[e.day] = (dayCount[e.day] || 0) + 1;
+        }
+    }
+    const daysWithSubject = new Set(Object.keys(dayCount));
 
-    const existingDays = new Set(Object.keys(dayCount));
-
-    // Returns true if `day` already has a different lab/project for this class
+    // SC2: does this day already have a different lab/project for this class?
     const dayHasOtherBlock = (day) =>
         entries.some(e =>
-            e.classId    === cls.id &&
-            e.subjectId  !== subject.id &&
-            e.subjectId  != null &&
-            !e.isActivity &&
-            e.day        === day &&
-            subjects.find(s => s.id === e.subjectId &&
-                (s.type === 'lab' || s.type === 'project'))
+            e.classId !== undefined && e.classId === cls.id &&
+            e.subjectId !== subject.id &&
+            e.day === day &&
+            (e.subjectType === 'lab' || e.subjectType === 'project')
         );
 
-    // Day load: total entries already placed for this class on each day.
-    // Used as primary sort key so lighter days (e.g. Fri/Sat) are filled
-    // before heavier ones, preventing Mon–Thu overload.
+    // H1: Day load (total entries for this class per day)
     const dayLoad = {};
-    days.forEach(d => {
-        dayLoad[d] = entries.filter(e => e.classId === cls.id && e.day === d).length;
-    });
+    for (const day of days)
+        dayLoad[day] = entries.filter(e => e.classId === cls.id && e.day === day).length;
 
-    // Day ordering:
-    //   1. Prefer days with fewer total entries (load balancing → fills Fri/Sat)
-    //   2. Prefer days where this subject hasn't appeared yet (spread)
-    let sortedDays = [...days].sort((a, b) => {
-        const loadDiff = (dayLoad[a] || 0) - (dayLoad[b] || 0);
-        if (loadDiff !== 0) return loadDiff;
-        return (existingDays.has(a) ? 1 : 0) - (existingDays.has(b) ? 1 : 0);
+    // Sort days: lighter days first (H1), then days without this subject first (H2)
+    const sortedDays = days.slice().sort((a, b) => {
+        const ld = (dayLoad[a] || 0) - (dayLoad[b] || 0);
+        if (ld !== 0) return ld;
+        return (daysWithSubject.has(a) ? 1 : 0) - (daysWithSubject.has(b) ? 1 : 0);
     });
-    // Projects still prefer Saturday
-    if (isProject) {
+    // H5: Projects prefer Saturday
+    if (subject.type === 'project')
         sortedDays.sort((a, b) => (a === 'Saturday' ? 0 : 1) - (b === 'Saturday' ? 0 : 1));
-    }
 
-    // Slot load: how many times each slot index is already used across all days
-    // for this class. Used to vary which period subjects occupy each day,
-    // preventing the "same subject at the same time every day" pattern.
+    // H3/H4: Slot ordering
     const slotLoad = {};
-    classSlots.forEach(s => {
+    for (const s of classSlots)
         slotLoad[s.index] = entries.filter(e => e.classId === cls.id && e.slotIndex === s.index).length;
-    });
 
-    // Slot ordering:
-    //   - Block types (lab/project): prefer later slots in the day (unchanged)
-    //   - Theory/elective: prefer less-loaded slots (spread across periods),
-    //     with earlier slot as tiebreaker to keep mornings busy first
-    const sortedSlots = isBlockType
-        ? [...classSlots].sort((a, b) => b.index - a.index)
-        : [...classSlots].sort((a, b) => {
-            const slotLoadDiff = (slotLoad[a.index] || 0) - (slotLoad[b.index] || 0);
-            if (slotLoadDiff !== 0) return slotLoadDiff;
-            return a.index - b.index;
-        });
+    const sortedSlots = isBlock
+        ? classSlots.slice().sort((a, b) => b.index - a.index)
+        : classSlots.slice().sort((a, b) => {
+              const ld = (slotLoad[a.index] || 0) - (slotLoad[b.index] || 0);
+              return ld !== 0 ? ld : a.index - b.index;
+          });
 
     for (const day of sortedDays) {
-            // Soft constraint: theory/elective max 3 of the same subject per day
-            // (Increased from 2 to reduce fragmented free slots)
-            if (!relaxed && isTheoryLike && (dayCount[day] || 0) >= 3) continue;
-        // Soft constraint: only one block-type session per day per class
-        if (!relaxed && isBlockType  && dayHasOtherBlock(day))       continue;
+        // SC1
+        if (!relaxed && isTheoryLike && (dayCount[day] || 0) >= MAX_SAME_SUBJECT_PER_DAY) continue;
+        // SC2
+        if (!relaxed && isBlock && dayHasOtherBlock(day)) continue;
 
         for (const slot of sortedSlots) {
-            const slotIdx = slot.index;
+            const start = slot.index;
 
-            // Hard constraint: consecutive class-type slots must exist
-            if (slotsNeeded > 1) {
-                let ok = true;
-                for (let d = 0; d < slotsNeeded && ok; d++) {
-                    const s = slotsArr[slotIdx + d];
-                    if (!s || s.type !== 'class') ok = false;
-                }
-                if (!ok) continue;
+            // HC4: consecutive class-type slots
+            let ok = true;
+            for (let i = 0; i < duration && ok; i++) {
+                const s = rawSlots[start + i];
+                if (!s || s.type !== 'class') ok = false;
             }
+            if (!ok) continue;
 
-            // Hard constraint: no double-booking
-            let allClear = true;
-            for (let d = 0; d < slotsNeeded && allClear; d++) {
-                const key = getKey(day, slotIdx + d);
-                if (isOccupied(cOcc, key, cls.id))              allClear = false;
-                if (isOccupied(fOcc, key, mapping.facultyId))  allClear = false;
-                if (mapping.labFaculty2Id &&
-                    isOccupied(fOcc, key, mapping.labFaculty2Id)) allClear = false;
+            // HC1 + HC3: no faculty/class double-booking
+            let clear = true;
+            const startTimeStr = rawSlots[start]?.start;
+            const endTimeStr = rawSlots[start + duration - 1]?.end;
+            const startM = timeStrMins(startTimeStr);
+            const endM = timeStrMins(endTimeStr);
+
+            for (let i = 0; i < duration && clear; i++) {
+                const k = slotKey(day, start + i);
+                if (isOccupied(maps.class,   k, cls.id))              clear = false;
             }
-            if (!allClear) continue;
+            if (!clear) continue;
 
-            // Find a suitable room for all required slots
-            const room = findRoom(rooms, subject, day, slotIdx, rOcc, cls, slotsNeeded);
+            if (startM > 0) {
+                if (checkTimeOverlap(maps.faculty, day, mapping.facultyId, startM, endM)) clear = false;
+                if (mapping.labFaculty2Id && checkTimeOverlap(maps.faculty, day, mapping.labFaculty2Id, startM, endM)) clear = false;
+            }
+            if (!clear) continue;
+
+            // HC2 + HC5: find a free room of the correct type
+            const room = findRoom(rooms, subject, day, start, maps.room, cls, duration, config);
             if (!room) continue;
 
-            // ✅ Place the entry
-            entries.push({
-                classId:       cls.id,
-                subjectId:     subject.id,
-                facultyId:     mapping.facultyId,
-                roomId:        room.id,
+            // All constraints satisfied — place the entry
+            entries.push(makeEntry({
+                classId:        cls.id,
+                subjectId:      subject.id,
+                facultyId:      mapping.facultyId,
+                labFaculty2Id:  mapping.labFaculty2Id,
+                roomId:         room.id,
                 day,
-                slotIndex:     slotIdx,
-                isLab:         subject.type === 'lab',
-                subjectType:   subject.type,
-                labFaculty2Id: mapping.labFaculty2Id || null,
-                isFixed:       false,
-                duration:      slotsNeeded,
-                schedulingNote: buildNote(subject, relaxed)
-            });
-
-            for (let d = 0; d < slotsNeeded; d++) {
-                const key = getKey(day, slotIdx + d);
-                occupy(fOcc, key, mapping.facultyId);
-                occupy(rOcc, key, room.id);
-                occupy(cOcc, key, cls.id);
-                if (mapping.labFaculty2Id) occupy(fOcc, key, mapping.labFaculty2Id);
-            }
-
+                slotIndex:      start,
+                duration,
+                subjectType:    subject.type,
+                isFixed:        false,
+                schedulingNote: buildNote(subject.type, duration, { relaxed: relaxed })
+            }));
+            occupyBlock(maps, day, start, duration, {
+                facultyId: mapping.facultyId, labFaculty2Id: mapping.labFaculty2Id,
+                roomId: room.id, classId: cls.id
+            }, config);
             return true;
         }
     }
-
     return false;
 }
 
-// ─── Phase 6: Swap-based repair (depth-1 backtracking) ────────────────────────
+// --- Phase 6: Swap-based repair ---------------------------------------------
 /**
- * Attempt to place `task` by evicting a movable (non-fixed) entry that is
- * blocking a slot the task needs, then re-placing that entry elsewhere.
+ * Try to place task by evicting a movable entry from a slot the task needs,
+ * then re-placing that entry elsewhere (depth-1 backtracking).
  *
- * This is a depth-1 backtracking step: we try ONE swap per candidate slot.
- * Hard constraints are never violated — the evicted entry must find a valid
- * new home before we commit the swap.
+ * For each candidate blocker entry (non-fixed, same class):
+ *   1. Check our faculty is free at the blocker slot (HC1 - cannot bypass)
+ *   2. Temporarily remove blocker from entries + occupancy
+ *   3. Try to re-place blocker elsewhere (relaxed = true)
+ *   4. If blocker moved AND task fits -> commit; return true
+ *   5. Otherwise undo all changes and try next candidate
+ *
+ * @returns {boolean} true if placed successfully
  */
-function swapRepair(task, entries, occupancies, subjects, classes, rooms,
-                    getSlotConfig, getClassSlots) {
+function swapRepair(task, entries, maps, subjects, classes, rooms, getSlotConfig, getClassSlots) {
     const { mapping, subject, cls } = task;
-    const { faculty: fOcc, room: rOcc, class: cOcc } = occupancies;
-    const config      = getSlotConfig(cls.year);
-    if (!config)      return false;
+    const config = getSlotConfig(cls.year);
+    if (!config) return false;
 
-    const slotsNeeded = subject.duration || 1;
-    const slotsArr    = config.slots.toObject ? config.slots.toObject() : config.slots;
-
-    // Candidate blockers: non-fixed entries belonging to the same class
-    const movable = entries.filter(e => !e.isFixed && e.classId === cls.id);
+    const duration = subject.duration || 1;
+    const rawSlots = getRawSlots(config);
+    const movable  = entries.filter(e => !e.isFixed && e.classId === cls.id);
 
     for (const blocker of movable) {
         const blockerDur = blocker.duration || 1;
 
-        // Skip if our task needs more slots than available starting from this position
-        if (slotsNeeded > 1) {
-            let ok = true;
-            for (let d = 0; d < slotsNeeded && ok; d++) {
-                const s = slotsArr[blocker.slotIndex + d];
-                if (!s || s.type !== 'class') ok = false;
-            }
-            if (!ok) continue;
+        // HC4: our task needs duration consecutive class-type slots at this position
+        let ok = true;
+        for (let i = 0; i < duration && ok; i++) {
+            const s = rawSlots[blocker.slotIndex + i];
+            if (!s || s.type !== 'class') ok = false;
         }
+        if (!ok) continue;
 
-        // Our faculty must be free at the blocker's slot (hard constraint — cannot swap around this)
+        // HC1: our faculty must be free at the blocker's slots
         let facultyFree = true;
-        for (let d = 0; d < slotsNeeded && facultyFree; d++) {
-            const key = getKey(blocker.day, blocker.slotIndex + d);
-            if (isOccupied(fOcc, key, mapping.facultyId))    facultyFree = false;
-            if (mapping.labFaculty2Id &&
-                isOccupied(fOcc, key, mapping.labFaculty2Id)) facultyFree = false;
+        const startTimeStr = rawSlots[blocker.slotIndex]?.start;
+        const endTimeStr = rawSlots[blocker.slotIndex + duration - 1]?.end;
+        const startM = timeStrMins(startTimeStr);
+        const endM = timeStrMins(endTimeStr);
+
+        if (startM > 0) {
+            if (checkTimeOverlap(maps.faculty, blocker.day, mapping.facultyId, startM, endM)) facultyFree = false;
+            if (mapping.labFaculty2Id && checkTimeOverlap(maps.faculty, blocker.day, mapping.labFaculty2Id, startM, endM)) facultyFree = false;
         }
         if (!facultyFree) continue;
 
-        // Temporarily remove the blocker from occupancy
-        for (let d = 0; d < blockerDur; d++) {
-            const key = getKey(blocker.day, blocker.slotIndex + d);
-            unoccupy(cOcc, key, blocker.classId);
-            unoccupy(fOcc, key, blocker.facultyId);
-            if (blocker.labFaculty2Id) unoccupy(fOcc, key, blocker.labFaculty2Id);
-            unoccupy(rOcc, key, blocker.roomId);
-        }
-
-        const blockerSubject = subjects.find(s => s.id === blocker.subjectId);
-        const blockerCls     = classes.find(c  => c.id  === blocker.classId);
+        // Temporarily evict the blocker
+        const blockerConfig = getSlotConfig(blocker.classId ? classById[blocker.classId].year : '1');
+        releaseBlock(maps, blocker.day, blocker.slotIndex, blockerDur, {
+            facultyId: blocker.facultyId, labFaculty2Id: blocker.labFaculty2Id,
+            roomId: blocker.roomId, classId: blocker.classId
+        }, blockerConfig);
         const blockerIdx     = entries.indexOf(blocker);
         entries.splice(blockerIdx, 1);
 
-        // Try to re-place the blocker in a different slot (relaxed = true)
-        const blockerMoved = blockerSubject && blockerCls && placeTask(
+        const blockerSubject = subjects.find(s => s.id === blocker.subjectId);
+        const blockerClass   = classes.find(c => c.id === blocker.classId);
+
+        const blockerMoved = blockerSubject && blockerClass && placeTask(
             {
-                mapping:  { facultyId: blocker.facultyId, labFaculty2Id: blocker.labFaculty2Id,
-                            subjectId: blocker.subjectId, classId: blocker.classId },
-                subject:  { ...blockerSubject, duration: blockerDur },
-                cls:      blockerCls
+                mapping: {
+                    facultyId:     blocker.facultyId,
+                    labFaculty2Id: blocker.labFaculty2Id,
+                    subjectId:     blocker.subjectId,
+                    classId:       blocker.classId
+                },
+                subject: { ...blockerSubject, duration: blockerDur },
+                cls:     blockerClass
             },
-            entries, occupancies, subjects, rooms, getSlotConfig, getClassSlots, true
+            entries, maps, rooms, getSlotConfig, getClassSlots,
+            true /* relaxed */
         );
 
         if (blockerMoved) {
-            // Check whether the task fits at the blocker's old position now
-            let canFit = true;
-            for (let d = 0; d < slotsNeeded && canFit; d++) {
-                const key = getKey(blocker.day, blocker.slotIndex + d);
-                if (isOccupied(cOcc, key, cls.id)) canFit = false;
+            // Check if our task fits at blocker's former slot
+            let classFree = true;
+            for (let i = 0; i < duration && classFree; i++) {
+                if (isOccupied(maps.class, slotKey(blocker.day, blocker.slotIndex + i), cls.id))
+                    classFree = false;
             }
 
-            if (canFit) {
-                const room = findRoom(rooms, subject, blocker.day, blocker.slotIndex, rOcc, cls, slotsNeeded);
+            if (classFree) {
+                const room = findRoom(rooms, subject, blocker.day, blocker.slotIndex, maps.room, cls, duration, config);
                 if (room) {
-                    // ✅ Swap successful — place the task
-                    entries.push({
-                        classId:       cls.id,
-                        subjectId:     subject.id,
-                        facultyId:     mapping.facultyId,
-                        roomId:        room.id,
-                        day:           blocker.day,
-                        slotIndex:     blocker.slotIndex,
-                        isLab:         subject.type === 'lab',
-                        labFaculty2Id: mapping.labFaculty2Id || null,
-                        isFixed:       false,
-                        duration:      slotsNeeded,
-                        schedulingNote: buildNote(subject, true) + '; swap-repaired'
-                    });
-                    for (let d = 0; d < slotsNeeded; d++) {
-                        const key = getKey(blocker.day, blocker.slotIndex + d);
-                        occupy(fOcc, key, mapping.facultyId);
-                        occupy(rOcc, key, room.id);
-                        occupy(cOcc, key, cls.id);
-                        if (mapping.labFaculty2Id) occupy(fOcc, key, mapping.labFaculty2Id);
-                    }
+                    // Swap succeeded
+                    entries.push(makeEntry({
+                        classId:        cls.id,
+                        subjectId:      subject.id,
+                        facultyId:      mapping.facultyId,
+                        labFaculty2Id:  mapping.labFaculty2Id,
+                        roomId:         room.id,
+                        day:            blocker.day,
+                        slotIndex:      blocker.slotIndex,
+                        duration,
+                        subjectType:    subject.type,
+                        isFixed:        false,
+                        schedulingNote: buildNote(subject.type, duration, { swapRepair: true })
+                    }));
+                    occupyBlock(maps, blocker.day, blocker.slotIndex, duration, {
+                        facultyId: mapping.facultyId, labFaculty2Id: mapping.labFaculty2Id,
+                        roomId: room.id, classId: cls.id
+                    }, config);
                     return true;
                 }
             }
 
-            // Task still doesn't fit — undo the blocker's new placement
-            const relocatedBlocker = entries.findLast(
-                e => e.classId === blocker.classId && e.subjectId === blocker.subjectId && !e.isFixed
-            );
-            if (relocatedBlocker) {
-                const rDur = relocatedBlocker.duration || 1;
-                for (let d = 0; d < rDur; d++) {
-                    const key = getKey(relocatedBlocker.day, relocatedBlocker.slotIndex + d);
-                    unoccupy(cOcc, key, relocatedBlocker.classId);
-                    unoccupy(fOcc, key, relocatedBlocker.facultyId);
-                    if (relocatedBlocker.labFaculty2Id) unoccupy(fOcc, key, relocatedBlocker.labFaculty2Id);
-                    unoccupy(rOcc, key, relocatedBlocker.roomId);
+            // Task still doesn't fit — undo blocker's new placement
+            // placeTask always appends, so find the most-recently-added entry for the blocker
+            let relocated = null;
+            for (let i = entries.length - 1; i >= 0; i--) {
+                const e = entries[i];
+                if (e.classId === blocker.classId && e.subjectId === blocker.subjectId && !e.isFixed) {
+                    relocated = e;
+                    break;
                 }
-                const rIdx = entries.indexOf(relocatedBlocker);
+            }
+            if (relocated) {
+                const rDur = relocated.duration || 1;
+                releaseBlock(maps, relocated.day, relocated.slotIndex, rDur, {
+                    facultyId: relocated.facultyId, labFaculty2Id: relocated.labFaculty2Id,
+                    roomId: relocated.roomId, classId: relocated.classId
+                }, blockerConfig);
+                const rIdx = entries.indexOf(relocated);
                 if (rIdx !== -1) entries.splice(rIdx, 1);
             }
         }
 
-        // Restore the blocker to its original position
+        // Restore blocker to its original position
         entries.splice(blockerIdx, 0, blocker);
-        for (let d = 0; d < blockerDur; d++) {
-            const key = getKey(blocker.day, blocker.slotIndex + d);
-            occupy(cOcc, key, blocker.classId);
-            occupy(fOcc, key, blocker.facultyId);
-            if (blocker.labFaculty2Id) occupy(fOcc, key, blocker.labFaculty2Id);
-            occupy(rOcc, key, blocker.roomId);
-        }
+        occupyBlock(maps, blocker.day, blocker.slotIndex, blockerDur, {
+            facultyId: blocker.facultyId, labFaculty2Id: blocker.labFaculty2Id,
+            roomId: blocker.roomId, classId: blocker.classId
+        }, blockerConfig);
     }
 
     return false;
 }
 
-// ─── Phase 7: Fill remaining free slots ───────────────────────────────────────
+// --- Phase 7: Fill remaining free slots -------------------------------------
 /**
- * Scan every empty class-type slot and fill it with an extra session of the
- * highest-priority subject for that class whose faculty and room are free.
+ * Scan every empty non-break/lunch slot and fill it with an extra session.
  *
- * Subject priority order (same as PRIORITY_MAP): theory → elective → Non-Academic.
- * Labs and projects are excluded — they require consecutive multi-slots and are
- * already placed as required sessions above.
- * Within the same priority tier, subjects with more required weekly periods rank
- * higher (core/frequent subjects get the extra time first).
+ * Distribution:
+ *   Weighted round-robin where each subject's weight = periodsPerWeek(subject).
+ *   Subjects with more total hours therefore appear proportionally more often,
+ *   naturally distributing extra sessions in the same ratio as the curriculum load.
  *
- * Only hard constraints are enforced (no double-booking of faculty/room/class).
+ *   SC1 (max MAX_SAME_SUBJECT_PER_DAY per day) is tried first so no subject
+ *   clusters into consecutive slots.  If every subject in the pool has already
+ *   hit the daily cap the slot is retried without the cap, ensuring free slots
+ *   are always filled when faculty/room permits.
+ *
+ * Rules:
+ *   'activity' slots → only activity-type subjects
+ *   'class' slots    → all non-lab, non-project, non-activity subjects
+ *   Labs and projects are excluded (multi-slot blocks, handled in phases 4-6).
+ *   Hard constraints HC1-HC5 are always respected.
  */
-function fillFreeSlots(entries, { faculty: fOcc, room: rOcc, class: cOcc },
-                       classes, subjects, rooms, facultySubjectMapping,
-                       getSlotConfig, getClassSlots) {
+function fillFreeSlots(entries, maps, classes, subjects, rooms, facultySubjectMapping, getSlotConfig) {
     for (const cls of classes) {
         const config = getSlotConfig(cls.year);
         if (!config) continue;
 
-        const days        = config.days;
-        // Scan ALL non-break/non-lunch slots for gaps — this deliberately includes
-        // 'activity' type slots that getClassSlots() would silently skip.
-        // Activity slots are now filled ONLY by subjects of type 'activity'.
-        const rawSlots    = config.slots.toObject ? config.slots.toObject() : config.slots;
-        const fillableSlots = rawSlots
-            .map((s, i) => ({ type: s.type, index: i }))
-            .filter(s => s.type !== 'break' && s.type !== 'lunch');
+        const days     = config.days;
+        const allSlots = getRawSlots(config);
+        const fillable = allSlots.map((s, i) => ({ type: s.type, index: i }))
+                                 .filter(s => s.type !== 'break' && s.type !== 'lunch');
 
-        // Build gap-fill pool: all single-period subjects for this class,
-        // sorted by priority then by required weekly periods (desc).
+        // Base pool: theory and activity subjects only (as requested: only theory for gap-filling).
+        // activity is kept to ensure activity slots can still be filled.
         const pool = facultySubjectMapping
             .filter(m => m.classId === cls.id)
             .map(m => ({ mapping: m, subject: subjects.find(s => s.id === m.subjectId) }))
-            .filter(({ subject }) =>
-                subject &&
-                subject.type !== 'lab' &&
-                subject.type !== 'project'
-            )
+            .filter(({ subject }) => subject && (subject.type === 'theory' || subject.type === 'activity'))
             .sort((a, b) => {
-                const priDiff = (PRIORITY_MAP[a.subject.type] ?? 5) -
-                                (PRIORITY_MAP[b.subject.type] ?? 5);
-                if (priDiff !== 0) return priDiff;
-                // More required periods = more important/core subject
-                return weeklyPeriods(b.subject) - weeklyPeriods(a.subject);
+                const pd = (PRIORITY[a.subject.type] || 99) - (PRIORITY[b.subject.type] || 99);
+                return pd !== 0 ? pd : (b.subject.totalHours || 0) - (a.subject.totalHours || 0);
             });
 
         if (pool.length === 0) continue;
 
-        // Round-robin pointer: advances after every successful placement so
-        // extra slots are distributed evenly across all subjects.
-        // First free slot → CCS (highest priority)
-        // Second free slot → ST (next in priority)
-        // Third free slot → OOAD → SPM → … → wraps back to CCS, etc.
-        let rrPointer = 0;
+        // Weighted pool: each subject repeated periodsPerWeek(subject) times.
+        // e.g. Math(45h)→3 repeats, Physics(30h)→2 repeats, Elective(30h)→2 repeats
+        // → rotation ratio 3:2:2 mirrors the curriculum hour ratio.
+        const weightedPool = [];
+        for (const p of pool) {
+            const w = periodsPerWeek(p.subject);
+            for (let i = 0; i < w; i++) weightedPool.push(p);
+        }
+
+        let rrIdx = 0;
 
         for (const day of days) {
-            for (const slot of fillableSlots) {
-                const slotIdx = slot.index;
-                const key     = getKey(day, slotIdx);
+            // Per-day count: initialised from phases 1-6 entries, updated as
+            // gap-fill sessions are placed so SC1 is tracked live.
+            const dayCount = {};
+            for (const e of entries) {
+                if (e.classId === cls.id && e.day === day && e.subjectId) {
+                    dayCount[e.subjectId] = (dayCount[e.subjectId] || 0) + (e.duration || 1);
+                }
+            }
 
-                if (isOccupied(cOcc, key, cls.id)) continue; // already filled
+            for (const slot of fillable) {
+                const k = slotKey(day, slot.index);
+                if (isOccupied(maps.class, k, cls.id)) continue;
 
-                // Starting from the current round-robin position, walk through
-                // the pool until a subject whose faculty and room are free is found.
-                // The pointer advances past the placed subject so the NEXT free slot
-                // starts from the subject after the one just used.
-                for (let attempt = 0; attempt < pool.length; attempt++) {
-                    const idx = (rrPointer + attempt) % pool.length;
-                    const { mapping, subject } = pool[idx];
+                // Two passes: pass 0 enforces SC1 (spread subjects across the day);
+                // pass 1 relaxes SC1 so the slot is never left empty due to the cap alone.
+                let sessionPlaced = false;
+                for (let pass = 0; pass <= 1 && !sessionPlaced; pass++) {
+                    for (let attempt = 0; attempt < weightedPool.length; attempt++) {
+                        const pi = (rrIdx + attempt) % weightedPool.length;
+                        const { mapping, subject } = weightedPool[pi];
 
-                    // Only allow subjects clearly marked as 'activity' in 'activity' slots,
-                    // and prevent activity subjects from taking up regular class slots.
-                    if (slot.type === 'activity' && subject.type !== 'activity') continue;
-                    if (slot.type === 'class'    && subject.type === 'activity') continue;
+                        // SC1: max MAX_SAME_SUBJECT_PER_DAY appearances per day (pass 0 only)
+                        if (pass === 0 && (dayCount[subject.id] || 0) >= MAX_SAME_SUBJECT_PER_DAY) continue;
 
-                    if (isOccupied(fOcc, key, mapping.facultyId)) continue;
-                    if (mapping.labFaculty2Id &&
-                        isOccupied(fOcc, key, mapping.labFaculty2Id)) continue;
+                        if (slot.type === 'activity' && subject.type !== 'activity') continue;
+                        if (slot.type === 'class'    && subject.type === 'activity') continue;
 
-                    const room = findRoom(rooms, subject, day, slotIdx, rOcc, cls, 1);
-                    if (!room) continue;
+                        const startTimeStr = allSlots[slot.index]?.start;
+                        const endTimeStr = allSlots[slot.index]?.end;
+                        const startM = timeStrMins(startTimeStr);
+                        const endM = timeStrMins(endTimeStr);
 
-                    entries.push({
-                        classId:        cls.id,
-                        subjectId:      subject.id,
-                        facultyId:      mapping.facultyId,
-                        roomId:         room.id,
-                        day,
-                        slotIndex:      slotIdx,
-                        isLab:          false,
-                        labFaculty2Id:  mapping.labFaculty2Id || null,
-                        isFixed:        false,
-                        isExtra:        true,
-                        duration:       1,
-                        schedulingNote: subject.type === 'activity' ? 'Activity session' : 'Extra session (gap-fill)'
-                    });
-                    occupy(fOcc, key, mapping.facultyId);
-                    occupy(rOcc, key, room.id);
-                    occupy(cOcc, key, cls.id);
-                    if (mapping.labFaculty2Id) occupy(fOcc, key, mapping.labFaculty2Id);
+                        if (startM > 0) {
+                            if (checkTimeOverlap(maps.faculty, day, mapping.facultyId, startM, endM)) continue;
+                            if (mapping.labFaculty2Id && checkTimeOverlap(maps.faculty, day, mapping.labFaculty2Id, startM, endM)) continue;
+                        }
 
-                    // Advance past the subject just placed so the next free slot
-                    // starts from the following subject in the pool
-                    rrPointer = (idx + 1) % pool.length;
-                    break;
+                        const room = findRoom(rooms, subject, day, slot.index, maps.room, cls, 1, config);
+                        if (!room) continue;
+
+                        entries.push(makeEntry({
+                            classId:        cls.id,
+                            subjectId:      subject.id,
+                            facultyId:      mapping.facultyId,
+                            labFaculty2Id:  mapping.labFaculty2Id,
+                            roomId:         room.id,
+                            day,
+                            slotIndex:      slot.index,
+                            duration:       1,
+                            subjectType:    subject.type,
+                            isFixed:        false,
+                            isExtra:        true,
+                            schedulingNote: buildNote(subject.type, 1, { extra: true })
+                        }));
+                        dayCount[subject.id] = (dayCount[subject.id] || 0) + 1;
+                        occupyBlock(maps, day, slot.index, 1, {
+                            facultyId: mapping.facultyId, labFaculty2Id: mapping.labFaculty2Id,
+                            roomId: room.id, classId: cls.id
+                        }, config);
+
+                        rrIdx = (pi + 1) % weightedPool.length;
+                        sessionPlaced = true;
+                        break;
+                    }
                 }
             }
         }
     }
 }
 
-// ─── Room finder ──────────────────────────────────────────────────────────────
-/**
- * Find an available room of the correct type for `slotsNeeded` consecutive slots.
- * Preference order for classrooms: (1) class default room, (2) same-department
- * classroom, (3) any classroom.  Labs prefer same-department lab.
- */
-function findRoom(rooms, subject, day, slotIdx, rOcc, cls, slotsNeeded) {
-    const isLab    = subject.type === 'lab';
-    const roomType = isLab ? 'lab' : 'classroom';
-
-    const freeForAll = (roomId) => {
-        for (let d = 0; d < slotsNeeded; d++) {
-            if (rOcc[getKey(day, slotIdx + d)]?.has(roomId)) return false;
-        }
-        return true;
-    };
-
-    if (!isLab) {
-        // 1. Class default room
-        if (cls?.defaultRoomId) {
-            const def = rooms.find(r => r.id === cls.defaultRoomId);
-            if (def && freeForAll(def.id)) return def;
-        }
-        // 2. Same-department classroom
-        const deptRoom = rooms.find(
-            r => r.type === roomType && r.departmentId === subject.departmentId && freeForAll(r.id)
-        );
-        if (deptRoom) return deptRoom;
-        // 3. Any free classroom
-        return rooms.find(r => r.type === roomType && freeForAll(r.id)) || null;
-    }
-
-    // Lab: prefer same-department lab
-    const deptLab = rooms.find(
-        r => r.type === 'lab' && r.departmentId === subject.departmentId && freeForAll(r.id)
-    );
-    return deptLab || rooms.find(r => r.type === 'lab' && freeForAll(r.id)) || null;
-}
-
-// ─── Note builder ─────────────────────────────────────────────────────────────
-/** Build a human-readable scheduling note based on subject type and placement mode. */
-function buildNote(subject, relaxed) {
-    const typeNotes = {
-        lab:            `Lab: ${subject.duration || 2}-slot consecutive block`,
-        project:        `Project: ${subject.duration || 2}-slot consecutive block`,
-        elective:       'Elective: spread across week',
-        'Non-Academic': 'Non-Academic: spread across week',
-    };
-    let note = typeNotes[subject.type] || 'Theory: spread across week';
-    if (relaxed) note += '; constraint-relaxed';
-    return note;
-}
+// --- Public utilities --------------------------------------------------------
 
 /**
- * Validate a swap operation
+ * Validate a swap between two timetable entries.
+ * @returns {{ valid: boolean, reason?: string, violations?: string[] }}
  */
 export function validateSwap(entries, entryIndex1, entryIndex2, data) {
     const e1 = entries[entryIndex1];
     const e2 = entries[entryIndex2];
 
-    if (!e1 || !e2) return { valid: false, reason: 'Invalid entry indices' };
+    if (!e1 || !e2)               return { valid: false, reason: 'Invalid entry indices' };
     if (e1.isFixed || e2.isFixed) return { valid: false, reason: 'Cannot swap fixed slots' };
 
-    const swapped = [...entries];
+    const swapped       = entries.slice();
     swapped[entryIndex1] = { ...e1, day: e2.day, slotIndex: e2.slotIndex, roomId: e2.roomId };
     swapped[entryIndex2] = { ...e2, day: e1.day, slotIndex: e1.slotIndex, roomId: e1.roomId };
 
     const violations = checkConstraints(swapped, data);
-    if (violations.length > 0) {
-        return { valid: false, reason: 'Swap creates conflicts', violations };
-    }
-
+    if (violations.length > 0) return { valid: false, reason: 'Swap creates conflicts', violations };
     return { valid: true };
 }
 
+/**
+ * Check all hard constraints across a complete set of entries.
+ * Returns an array of human-readable violation strings (empty = no violations).
+ */
 export function checkConstraints(entries, data) {
-    const violations = [];
-    const facultySlots = {};
-    const roomSlots = {};
-    const classSlots = {};
-    const frequencyCount = {};
+    const violations  = [];
+    const facultyReg  = {};
+    const roomReg     = {};
+    const classReg    = {};
+    const periodCount = {};
 
-    for (const entry of entries) {
-        const freqKey = `${entry.classId}-${entry.subjectId}`;
-        frequencyCount[freqKey] = (frequencyCount[freqKey] || 0) + 1;
+    for (const e of entries) {
+        const subject  = data.subjects ? data.subjects.find(s => s.id === e.subjectId) : null;
+        const duration = e.duration || (subject && subject.duration) || 1;
+        const freqKey  = e.classId + '-' + e.subjectId;
+        periodCount[freqKey] = (periodCount[freqKey] || 0) + duration;
 
-        const subject = data.subjects ? data.subjects.find(s => s.id === entry.subjectId) : null;
-        const duration = entry.duration || subject?.duration || 1;
+        for (let i = 0; i < duration; i++) {
+            const k = e.day + '-' + (e.slotIndex + i);
 
-        for (let d = 0; d < duration; d++) {
-            const key = `${entry.day}-${entry.slotIndex + d}`;
-
-            // Faculty double-booking
-            if (entry.facultyId) {
-                const fKey = `${entry.facultyId}-${key}`;
-                if (facultySlots[fKey]) violations.push(`Faculty ${entry.facultyId} double-booked at ${key}`);
-                facultySlots[fKey] = true;
+            if (e.facultyId) {
+                const fk = e.facultyId + '-' + k;
+                if (facultyReg[fk]) violations.push('Faculty ' + e.facultyId + ' double-booked at ' + k);
+                facultyReg[fk] = true;
+            }
+            if (e.labFaculty2Id) {
+                const f2k = e.labFaculty2Id + '-' + k;
+                if (facultyReg[f2k]) violations.push('Lab faculty ' + e.labFaculty2Id + ' double-booked at ' + k);
+                facultyReg[f2k] = true;
             }
 
-            if (entry.labFaculty2Id) {
-                const f2Key = `${entry.labFaculty2Id}-${key}`;
-                if (facultySlots[f2Key]) violations.push(`Lab faculty ${entry.labFaculty2Id} double-booked at ${key}`);
-                facultySlots[f2Key] = true;
-            }
+            const ck = e.classId + '-' + k;
+            if (classReg[ck]) violations.push('Class ' + e.classId + ' double-booked at ' + k);
+            classReg[ck] = true;
 
-            // Class double-booking
-            const cKey = `${entry.classId}-${key}`;
-            if (classSlots[cKey]) violations.push(`Class ${entry.classId} double-booked at ${key}`);
-            classSlots[cKey] = true;
-
-            // Room double-booking
-            if (entry.roomId) {
-                const rKey = `${entry.roomId}-${key}`;
-                if (roomSlots[rKey]) violations.push(`Room ${entry.roomId} double-booked at ${key}`);
-                roomSlots[rKey] = true;
+            if (e.roomId) {
+                const rk = e.roomId + '-' + k;
+                if (roomReg[rk]) violations.push('Room ' + e.roomId + ' double-booked at ' + k);
+                roomReg[rk] = true;
             }
         }
 
-        // Room type validation
-        if (data.rooms && entry.roomId) {
-            const room = data.rooms.find(r => r.id === entry.roomId);
-            const expectedType = subject?.type === 'lab' ? 'lab' : 'classroom';
-            if (room && room.type !== expectedType) {
-                violations.push(`Room ${entry.roomId} is ${room.type} but subject requires ${expectedType}`);
-            }
+        if (data.rooms && e.roomId && subject) {
+            const room         = data.rooms.find(r => r.id === e.roomId);
+            const expectedType = subject.type === 'lab' ? 'lab' : 'classroom';
+            if (room && room.type !== expectedType)
+                violations.push('Room ' + e.roomId + ' is ' + room.type + ' but subject requires ' + expectedType);
         }
 
-        // Faculty qualification check
         if (data.facultySubjectMapping) {
-            const mapping = data.facultySubjectMapping.find(m =>
-                m.classId === entry.classId &&
-                m.subjectId === entry.subjectId &&
-                m.facultyId === entry.facultyId
+            const hasMapping = data.facultySubjectMapping.some(
+                m => m.classId === e.classId && m.subjectId === e.subjectId && m.facultyId === e.facultyId
             );
-            if (!mapping) {
-                violations.push(`Faculty ${entry.facultyId} not mapped to teach ${entry.subjectId} for class ${entry.classId}`);
-            }
+            if (!hasMapping)
+                violations.push('Faculty ' + e.facultyId + ' not mapped to teach ' + e.subjectId + ' for class ' + e.classId);
         }
     }
 
-    // Weekly periods constraint (totalHours ÷ SEMESTER_WEEKS)
     if (data.facultySubjectMapping && data.subjects) {
-        for (const mapping of data.facultySubjectMapping) {
-            const subject = data.subjects.find(s => s.id === mapping.subjectId);
+        for (const m of data.facultySubjectMapping) {
+            const subject = data.subjects.find(s => s.id === m.subjectId);
             if (!subject) continue;
-            const key = `${mapping.classId}-${mapping.subjectId}`;
-            const count = frequencyCount[key] || 0;
-            const expected = weeklyPeriods(subject);
-            // Only flag under-scheduling; extra gap-fill sessions (isExtra) are intentional
-            if (count < expected) {
-                violations.push(`Subject ${mapping.subjectId} for class ${mapping.classId} scheduled ${count} period(s) but requires ${expected} weekly periods (from ${subject.totalHours} total hours)`);
-            }
+            const key     = m.classId + '-' + m.subjectId;
+            const placed  = periodCount[key] || 0;
+            const needed  = periodsPerWeek(subject);
+            if (placed < needed)
+                violations.push(
+                    'Subject ' + m.subjectId + ' for class ' + m.classId +
+                    ' scheduled ' + placed + ' period(s) but requires ' + needed +
+                    ' weekly periods (from ' + subject.totalHours + ' total hours)'
+                );
         }
     }
 
@@ -752,33 +856,38 @@ export function checkConstraints(entries, data) {
 }
 
 /**
- * Build an allocation summary for a timetable — returns per-subject stats with notes
+ * Build a per-subject allocation summary for a timetable.
+ * Returns one row per unique class+subject combination mapped in the system.
  */
-export function buildAllocationSummary(entries, subjects, facultySubjectMapping) {
+export function buildAllocationSummary(entries, subjects, mappings, classes) {
     const summary = [];
 
-    // Subject entries
-    const seen = new Set();
-    for (const entry of entries) {
-        if (!entry.subjectId || entry.isActivity) continue;
-        const key = `${entry.classId}-${entry.subjectId}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+    // Group mappings by class to make it easier to process
+    for (const cls of classes) {
+        const classMappings = mappings.filter(m => m.classId === cls.id);
+        
+        for (const mapping of classMappings) {
+            const subject = subjects.find(s => s.id === mapping.subjectId);
+            if (!subject) continue;
 
-        const subject = subjects.find(s => s.id === entry.subjectId);
-        if (!subject) continue;
+            const classSubjectEntries = entries.filter(e => e.classId === cls.id && e.subjectId === subject.id);
+            const allocatedPeriods = classSubjectEntries.reduce((sum, e) => sum + (e.duration || 1), 0);
+            const required = periodsPerWeek(subject);
+            const notes = Array.from(new Set(classSubjectEntries.map(e => e.schedulingNote).filter(Boolean))).join('; ');
 
-        const subjectEntries = entries.filter(e => e.classId === entry.classId && e.subjectId === entry.subjectId);
-        const allocatedPeriods = subjectEntries.reduce((sum, e) => sum + (e.duration || 1), 0);
-
-        const notes = [...new Set(subjectEntries.map(e => e.schedulingNote).filter(Boolean))].join('; ');
-
-        summary.push({
-            courseTitle: subject.name,
-            courseCode: subject.code,
-            allocatedPeriods,
-            schedulingNote: notes || buildNote(subject, false)
-        });
+            summary.push({
+                classId: cls.id,
+                className: cls.name,
+                subjectId: subject.id,
+                courseTitle: subject.name,
+                courseCode: subject.code,
+                requiredPeriods: required,
+                allocatedPeriods,
+                remainingPeriods: Math.max(0, required - allocatedPeriods),
+                isFullyAllocated: allocatedPeriods >= required,
+                schedulingNote: notes || (allocatedPeriods > 0 ? '' : 'Not allocated')
+            });
+        }
     }
 
     return summary;

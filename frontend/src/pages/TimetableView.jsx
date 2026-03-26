@@ -87,7 +87,7 @@ export default function TimetableView() {
         setViewMode(mode);
         setViewData(null); // Explicit clear
         const labRooms = rooms.filter(r => r.type === 'lab');
-        if (mode === 'class' && classes.length > 0) {
+        if ((mode === 'class' || mode === 'summary') && classes.length > 0) {
             setSelectedId(classes[0].id);
         } else if (mode === 'faculty' && faculty.length > 0) {
             setSelectedId(faculty[0].id);
@@ -154,170 +154,195 @@ export default function TimetableView() {
             );
         }
 
-        const config = (viewMode === 'class' || viewMode === 'lab') ? viewData.timeSlotConfig : viewData.timeSlotConfigs?.[0];
-        if (!config) return <div className="empty-state"><p>No time slot configuration found</p></div>;
+        const configs = viewMode === 'faculty' 
+            ? (viewData.timeSlotConfigs || []) 
+            : [viewData.timeSlotConfig].filter(Boolean);
 
-        const days = config.days;
-        const slots = config.slots;
-        const entries = viewData.entries;
-
-        // Build lookup: day -> slotIndex -> entry
-        const lookup = {};
-        entries.forEach((e, idx) => {
-            const key = `${e.day}-${e.slotIndex}`;
-            if (!lookup[key]) lookup[key] = [];
-            lookup[key].push({
-                ...e, _idx: timetable.entries.findIndex(te =>
-                    te.classId === e.classId && te.subjectId === e.subjectId && te.day === e.day && te.slotIndex === e.slotIndex
-                )
-            });
-        });
+        if (configs.length === 0) return <div className="empty-state"><p>No time slot configuration found</p></div>;
 
         return (
-            <div className="timetable-grid">
-                <table className="timetable-table">
-                    <thead>
-                        <tr>
-                            <th style={{ width: 80 }}>Time</th>
-                            {days.map(day => (
-                                <th key={day} className="timetable-day-header">{day}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {slots.map((slot, slotIdx) => {
-                            if (slot.type === 'break') {
-                                return (
-                                    <tr key={slotIdx}>
-                                        <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
-                                        {days.map(day => (
-                                            <td key={day}><div className="timetable-slot break-slot">Break</div></td>
-                                        ))}
-                                    </tr>
-                                );
-                            }
-                            if (slot.type === 'lunch') {
-                                return (
-                                    <tr key={slotIdx}>
-                                        <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
-                                        {days.map(day => (
-                                            <td key={day}><div className="timetable-slot lunch-slot">Lunch</div></td>
-                                        ))}
-                                    </tr>
-                                );
-                            }
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+                {configs.map((config, configIdx) => {
+                    const days = config.days;
+                    const slots = config.slots;
+                    
+                    // Filter entries for this specific config's year
+                    const filteredEntries = viewMode === 'faculty' 
+                        ? viewData.entries.filter(e => Number(e.classYear) === Number(config.year))
+                        : viewData.entries;
 
-                            return (
-                                <tr key={slotIdx}>
-                                    <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
-                                    {days.map(day => {
-                                        const key = `${day}-${slotIdx}`;
-                                        const cellEntries = lookup[key] || [];
+                    if (viewMode === 'faculty' && filteredEntries.length === 0 && configs.length > 1) return null;
 
-                                        // Check if any multi-slot subject (Lab, Project, etc.) started earlier and covers this slot
-                                        let continuation = null;
-                                        for (let offset = 1; offset <= slotIdx; offset++) {
-                                            const earlierEntries = lookup[`${day}-${slotIdx - offset}`] || [];
-                                            continuation = earlierEntries.find(e => e.duration > offset);
-                                            if (continuation) break;
-                                        }
+                    // Build lookup: day -> slotIndex -> entry
+                    const lookup = {};
+                    filteredEntries.forEach((e) => {
+                        const key = `${e.day}-${e.slotIndex}`;
+                        if (!lookup[key]) lookup[key] = [];
+                        lookup[key].push({
+                            ...e, _idx: timetable.entries.findIndex(te =>
+                                te.classId === e.classId && te.subjectId === e.subjectId && te.day === e.day && te.slotIndex === e.slotIndex
+                            )
+                        });
+                    });
 
-                                        if (cellEntries.length === 0 && continuation) {
-                                            const typeClass = continuation.isLab ? 'lab' : (continuation.subjectType === 'project' ? 'project' : 'theory');
-                                            return (
-                                                <td key={day} style={{ verticalAlign: 'top', paddingTop: 0 }}>
-                                                    <div className={`timetable-slot ${typeClass}`} style={{ opacity: 0.7, borderTop: 'none', borderRadius: '0 0 4px 4px', minHeight: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <div className="slot-subject" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                                                            ↕ {continuation.subjectCode || 'cont.'}
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            );
-                                        }
-
-                                        if (cellEntries.length === 0) {
-                                            if (slot.type === 'activity') {
-                                                return <td key={day}><div className="timetable-slot activity-slot">Activity Hour</div></td>;
+                    return (
+                        <div key={config.id || configIdx} className="card" style={{ padding: '24px', marginBottom: '32px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                            {configs.length > 1 && (
+                                <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{ width: 4, height: 24, background: '#1a73e8', borderRadius: 2 }}></div>
+                                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#333' }}>
+                                        Schedule for Year {config.year} Configuration
+                                    </h3>
+                                    <span style={{ fontSize: 12, color: '#666', background: '#f0f0f0', padding: '2px 8px', borderRadius: 4 }}>
+                                        {slots.filter(s => s.type === 'class').length} classes per day
+                                    </span>
+                                </div>
+                            )}
+                            <div className="timetable-grid">
+                                <table className="timetable-table">
+                                    <thead>
+                                        <tr>
+                                            <th style={{ width: 80 }}>Time</th>
+                                            {days.map(day => (
+                                                <th key={day} className="timetable-day-header">{day}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {slots.map((slot, slotIdx) => {
+                                            if (slot.type === 'break') {
+                                                return (
+                                                    <tr key={slotIdx}>
+                                                        <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
+                                                        {days.map(day => (
+                                                            <td key={day}><div className="timetable-slot break-slot">Break</div></td>
+                                                        ))}
+                                                    </tr>
+                                                );
                                             }
-                                            return <td key={day}></td>;
-                                        }
+                                            if (slot.type === 'lunch') {
+                                                return (
+                                                    <tr key={slotIdx}>
+                                                        <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
+                                                        {days.map(day => (
+                                                            <td key={day}><div className="timetable-slot lunch-slot">Lunch</div></td>
+                                                        ))}
+                                                    </tr>
+                                                );
+                                            }
 
-                                        const entry = cellEntries[0];
-                                        // Activity slot styling
-                                        if (entry.isActivity) {
                                             return (
-                                                <td key={day}>
-                                                    <div className="timetable-slot" style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', cursor: 'default' }}
-                                                        title={`Fixed Activity: ${entry.activityLabel}`}>
-                                                        <div className="slot-subject" style={{ fontSize: 11, color: '#15803d' }}>📌 {entry.activityLabel}</div>
-                                                    </div>
-                                                </td>
-                                            );
-                                        }
-                                        return (
-                                            <td key={day}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                                    {cellEntries.map((entry, eIdx) => {
-                                                        const isConf = !!entry.isConflict;
-                                                        const typeClass = entry.isLab ? 'lab' : (entry.subjectType === 'project' ? 'project' : 'theory');
-                                                        const isActive = swapMode && (swapFirst === entry._idx);
+                                                <tr key={slotIdx}>
+                                                    <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
+                                                    {days.map(day => {
+                                                        const key = `${day}-${slotIdx}`;
+                                                        const cellEntries = lookup[key] || [];
+
+                                                        let continuation = null;
+                                                        for (let offset = 1; offset <= slotIdx; offset++) {
+                                                            const earlierEntries = lookup[`${day}-${slotIdx - offset}`] || [];
+                                                            continuation = earlierEntries.find(e => e.duration > offset);
+                                                            if (continuation) break;
+                                                        }
+
+                                                        if (cellEntries.length === 0 && continuation) {
+                                                            const typeClass = continuation.isLab ? 'lab' : (continuation.subjectType === 'project' ? 'project' : 'theory');
+                                                            return (
+                                                                <td key={day} style={{ verticalAlign: 'top', paddingTop: 0 }}>
+                                                                    <div className={`timetable-slot ${typeClass}`} style={{ opacity: 0.7, borderTop: 'none', borderRadius: '0 0 4px 4px', minHeight: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        <div className="slot-subject" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                                                                            ↕ {continuation.subjectCode || 'cont.'}
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                            );
+                                                        }
+
+                                                        if (cellEntries.length === 0) {
+                                                            if (slot.type === 'activity') {
+                                                                return <td key={day}><div className="timetable-slot activity-slot">Activity Hour</div></td>;
+                                                            }
+                                                            return <td key={day}></td>;
+                                                        }
 
                                                         return (
-                                                            <div
-                                                                key={eIdx}
-                                                                className={`timetable-slot ${typeClass} ${isActive ? 'swap-highlight' : ''}`}
-                                                                style={{
-                                                                    cursor: swapMode ? 'pointer' : 'default',
-                                                                    border: isConf ? '2px solid #ef4444' : (entry.isExtra ? '1px solid #f59e0b' : undefined),
-                                                                    background: isConf ? '#fee2e2' : undefined,
-                                                                    minHeight: cellEntries.length > 1 ? 40 : 64,
-                                                                    padding: cellEntries.length > 1 ? '4px 8px' : '10px 12px',
-                                                                    position: 'relative'
-                                                                }}
-                                                                onClick={() => handleSlotClick(entry, entry._idx)}
-                                                                title={[
-                                                                    isConf ? '⚠ OVERLAP DETECTED' : '',
-                                                                    `${entry.subjectName} (${entry.subjectCode})`,
-                                                                    `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
-                                                                    `Room: ${entry.roomName}`,
-                                                                    entry.isExtra ? 'Extra session (gap-fill)' : '',
-                                                                    entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
-                                                                ].filter(Boolean).join('\n')}
-                                                            >
-                                                                {isConf && (
-                                                                    <div style={{ position: 'absolute', top: 2, right: 4, color: '#ef4444', fontSize: 9, fontWeight: 'bold' }}>
-                                                                        ⚠ OVERLAP
-                                                                    </div>
-                                                                )}
-                                                                <div className="slot-subject">
-                                                                    {entry.subjectCode || entry.subjectName}
-                                                                    {entry.isExtra && <span style={{ fontSize: 9, marginLeft: 3, color: '#f59e0b', fontWeight: 700 }}>+</span>}
+                                                            <td key={day}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                                    {cellEntries.map((entry, eIdx) => {
+                                                                        if (entry.isActivity) {
+                                                                            return (
+                                                                                <div key={eIdx} className="timetable-slot" style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', cursor: 'default' }}
+                                                                                    title={`Fixed Activity: ${entry.activityLabel}`}>
+                                                                                    <div className="slot-subject" style={{ fontSize: 11, color: '#15803d' }}>📌 {entry.activityLabel}</div>
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        
+                                                                        const isConf = !!entry.isConflict;
+                                                                        const typeClass = entry.isLab ? 'lab' : (entry.subjectType === 'project' ? 'project' : 'theory');
+                                                                        const isActive = swapMode && (swapFirst === entry._idx);
+
+                                                                        return (
+                                                                            <div
+                                                                                key={eIdx}
+                                                                                className={`timetable-slot ${typeClass} ${isActive ? 'swap-highlight' : ''}`}
+                                                                                style={{
+                                                                                    cursor: swapMode ? 'pointer' : 'default',
+                                                                                    border: isConf ? '2px solid #ef4444' : (entry.isExtra ? '1px solid #f59e0b' : undefined),
+                                                                                    background: isConf ? '#fee2e2' : undefined,
+                                                                                    minHeight: cellEntries.length > 1 ? 40 : 64,
+                                                                                    padding: cellEntries.length > 1 ? '4px 8px' : '10px 12px',
+                                                                                    position: 'relative'
+                                                                                }}
+                                                                                onClick={() => handleSlotClick(entry, entry._idx)}
+                                                                                title={[
+                                                                                    isConf ? '⚠ OVERLAP DETECTED' : '',
+                                                                                    `${entry.subjectName} (${entry.subjectCode})`,
+                                                                                    `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
+                                                                                    `Room: ${entry.roomName}`,
+                                                                                    entry.isExtra ? 'Extra session (gap-fill)' : '',
+                                                                                    entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
+                                                                                ].filter(Boolean).join('\n')}
+                                                                            >
+                                                                                {isConf && (
+                                                                                    <div style={{ position: 'absolute', top: 2, right: 4, color: '#ef4444', fontSize: 9, fontWeight: 'bold' }}>
+                                                                                        ⚠ OVERLAP
+                                                                                    </div>
+                                                                                )}
+                                                                                <div className="slot-subject">
+                                                                                    {entry.subjectCode || entry.subjectName}
+                                                                                    {entry.isExtra && <span style={{ fontSize: 9, marginLeft: 3, color: '#f59e0b', fontWeight: 700 }}>+</span>}
+                                                                                </div>
+                                                                                <div className="slot-faculty">
+                                                                                    {viewMode === 'lab'
+                                                                                        ? `${entry.className} · ${entry.facultyName}`
+                                                                                        : viewMode === 'class'
+                                                                                            ? entry.facultyName
+                                                                                            : entry.className
+                                                                                    }
+                                                                                    {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
+                                                                                </div>
+                                                                                {viewMode !== 'lab' && <div className="slot-room">{entry.roomName}</div>}
+                                                                            </div>
+                                                                        );
+                                                                    })}
                                                                 </div>
-                                                                <div className="slot-faculty">
-                                                                    {viewMode === 'lab'
-                                                                        ? `${entry.className} · ${entry.facultyName}`
-                                                                        : viewMode === 'class'
-                                                                            ? entry.facultyName
-                                                                            : entry.className
-                                                                    }
-                                                                    {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
-                                                                </div>
-                                                                {viewMode !== 'lab' && <div className="slot-room">{entry.roomName}</div>}
-                                                            </div>
+                                                            </td>
                                                         );
                                                     })}
-                                                </div>
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         );
     };
+
 
     return (
         <div className="fade-in">
@@ -366,9 +391,9 @@ export default function TimetableView() {
                     </button>
                 </div>
 
-                {viewMode !== 'summary' && (
+                {(viewMode === 'class' || viewMode === 'summary' || viewMode === 'faculty' || viewMode === 'lab') && (
                     <select className="form-select" style={{ width: 250 }} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
-                        {viewMode === 'class'
+                        {(viewMode === 'class' || viewMode === 'summary')
                             ? classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
                             : viewMode === 'faculty'
                                 ? faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
@@ -398,45 +423,89 @@ export default function TimetableView() {
                 <div>
                     {allocationSummary ? (
                         <>
-                            {/* Totals bar */}
-                            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
-                                {[
-                                    { label: 'Total Allocated', value: allocationSummary.totals?.totalAllocated, color: '#6366f1' },
-                                    { label: 'Subject Periods', value: allocationSummary.totals?.subjectPeriods, color: '#0ea5e9' },
-                                    { label: 'Fixed Activities', value: allocationSummary.totals?.fixedPeriods, color: '#22c55e' },
-                                    { label: 'Remaining / 42', value: allocationSummary.totals?.remaining, color: allocationSummary.totals?.remaining < 0 ? '#ef4444' : '#f59e0b' },
-                                ].map(stat => (
-                                    <div key={stat.label} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '16px 22px', minWidth: 140, boxShadow: 'var(--shadow-sm)' }}>
-                                        <div style={{ fontSize: 28, fontWeight: 700, color: stat.color }}>{stat.value ?? '—'}</div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{stat.label}</div>
-                                    </div>
-                                ))}
-                            </div>
+                            {/* Filter summary for selected class */}
+                            {(() => {
+                                const classSummary = allocationSummary.summary?.filter(s => s.classId === selectedId) || [];
+                                const classTotals = {
+                                    allocated: classSummary.reduce((sum, r) => sum + r.allocatedPeriods, 0),
+                                    required: classSummary.reduce((sum, r) => sum + r.requiredPeriods, 0),
+                                    remaining: classSummary.reduce((sum, r) => sum + r.remainingPeriods, 0)
+                                };
 
-                            <div className="data-table-wrapper">
-                                <table className="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Course Title</th>
-                                            <th>Course Code</th>
-                                            <th>Allocated Periods/Week</th>
-                                            <th>Scheduling Notes</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {allocationSummary.summary?.map((row, i) => (
-                                            <tr key={i}>
-                                                <td style={{ fontWeight: 600 }}>{row.courseTitle}</td>
-                                                <td><code style={{ fontSize: 12 }}>{row.courseCode}</code></td>
-                                                <td style={{ textAlign: 'center' }}>
-                                                    <span style={{ background: '#ede9fe', color: '#6d28d9', padding: '2px 10px', borderRadius: 12, fontWeight: 600, fontSize: 13 }}>{row.allocatedPeriods}</span>
-                                                </td>
-                                                <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 300 }}>{row.schedulingNote}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                                return (
+                                    <>
+                                        {/* Class Totals bar */}
+                                        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+                                            {[
+                                                { label: 'Allocated Periods', value: classTotals.allocated, color: '#6366f1' },
+                                                { label: 'Required Periods', value: classTotals.required, color: '#0ea5e9' },
+                                                { label: 'Remaining to Allocate', value: classTotals.remaining, color: classTotals.remaining > 0 ? '#ef4444' : '#22c55e' },
+                                                { label: 'Completion', value: classTotals.required > 0 ? `${Math.round((classTotals.allocated / classTotals.required) * 100)}%` : '0%', color: '#f59e0b' },
+                                            ].map(stat => (
+                                                <div key={stat.label} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '16px 22px', minWidth: 140, boxShadow: 'var(--shadow-sm)' }}>
+                                                    <div style={{ fontSize: 24, fontWeight: 700, color: stat.color }}>{stat.value ?? '—'}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{stat.label}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="data-table-wrapper">
+                                            <table className="data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Subject</th>
+                                                        <th>Code</th>
+                                                        <th>Status</th>
+                                                        <th style={{ textAlign: 'center' }}>Required</th>
+                                                        <th style={{ textAlign: 'center' }}>Allocated</th>
+                                                        <th style={{ textAlign: 'center' }}>Remaining</th>
+                                                        <th>Notes</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {classSummary.map((row, i) => (
+                                                        <tr key={i} style={{ opacity: row.allocatedPeriods === 0 ? 0.7 : 1 }}>
+                                                            <td>
+                                                                <div style={{ fontWeight: 600 }}>{row.courseTitle}</div>
+                                                            </td>
+                                                            <td><code style={{ fontSize: 12 }}>{row.courseCode}</code></td>
+                                                            <td>
+                                                                {row.isFullyAllocated ? (
+                                                                    <span style={{ color: '#059669', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
+                                                                        <span style={{ fontSize: 16 }}>✓</span> Fully Allocated
+                                                                    </span>
+                                                                ) : row.allocatedPeriods > 0 ? (
+                                                                    <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
+                                                                        <span style={{ fontSize: 16 }}>⚠</span> Partially Allocated
+                                                                    </span>
+                                                                ) : (
+                                                                    <span style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
+                                                                        <span style={{ fontSize: 16 }}>✕</span> Not Allocated
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td style={{ textAlign: 'center', fontWeight: 600 }}>{row.requiredPeriods}</td>
+                                                            <td style={{ textAlign: 'center' }}>
+                                                                <span style={{ 
+                                                                    background: row.isFullyAllocated ? '#ecfdf5' : (row.allocatedPeriods > 0 ? '#fffbeb' : '#fef2f2'), 
+                                                                    color: row.isFullyAllocated ? '#065f46' : (row.allocatedPeriods > 0 ? '#92400e' : '#991b1b'), 
+                                                                    padding: '2px 10px', borderRadius: 12, fontWeight: 700, fontSize: 13 
+                                                                }}>
+                                                                    {row.allocatedPeriods}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ textAlign: 'center', color: row.remainingPeriods > 0 ? '#ef4444' : 'inherit', fontWeight: row.remainingPeriods > 0 ? 700 : 400 }}>
+                                                                {row.remainingPeriods}
+                                                            </td>
+                                                            <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 250 }}>{row.schedulingNote}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </>
                     ) : (
                         <div className="empty-state"><p>No allocation summary available. Generate a timetable first.</p></div>

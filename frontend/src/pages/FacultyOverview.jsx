@@ -44,6 +44,20 @@ export default function FacultyOverview() {
         }
     };
 
+    const handleResolve = async (entryIndex, subjectName) => {
+        if (!window.confirm(`Attempt to automatically move "${subjectName}" to the first available free slot for this faculty, room, and class?`)) return;
+        
+        setLoading(true);
+        try {
+            await api.put(`/timetable/${id}/resolve/${entryIndex}`);
+            await loadOverview();
+            // Scroll to the updated timetable area or just show success
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to auto-resolve conflict.');
+            setLoading(false);
+        }
+    };
+
     if (loading) return (
         <div className="loading-overlay">
             <div className="spinner"></div>
@@ -236,6 +250,7 @@ export default function FacultyOverview() {
                     toPct={toPct}
                     widthPct={widthPct}
                     setTooltip={setTooltip}
+                    onResolve={handleResolve}
                     ROW_HEIGHT={ROW_HEIGHT}
                     RULER_HEIGHT={RULER_HEIGHT}
                     DAY_LABEL_WIDTH={DAY_LABEL_WIDTH}
@@ -250,7 +265,7 @@ export default function FacultyOverview() {
 /* ─────────────────────────────────────────────────────── */
 function FacultyGanttCard({
     fs, ticks, minMins, totalDuration, toPct, widthPct,
-    setTooltip,
+    setTooltip, onResolve,
     ROW_HEIGHT, RULER_HEIGHT, DAY_LABEL_WIDTH
 }) {
     // Re-detect conflicts for this faculty card specifically
@@ -465,6 +480,7 @@ function FacultyGanttCard({
                                                 } else {
                                                     tooltipText += `\nOverlap with ${clashingSessions.length} other session(s)`;
                                                 }
+                                                tooltipText += '\n\n⚡ Click to Auto-Resolve';
                                             }
 
                                             return (
@@ -508,6 +524,11 @@ function FacultyGanttCard({
                                                         ev.currentTarget.style.filter = '';
                                                         ev.currentTarget.style.transform = '';
                                                         setTooltip(null);
+                                                    }}
+                                                    onClick={() => {
+                                                        if (isConflict) {
+                                                            onResolve(e.originalIndex, e.subjectCode);
+                                                        }
                                                     }}
                                                 >
                                                     <div style={{

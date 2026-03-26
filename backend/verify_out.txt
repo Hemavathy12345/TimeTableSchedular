@@ -1,2 +1,0 @@
-Mongoose count: 4
-Direct count: 4

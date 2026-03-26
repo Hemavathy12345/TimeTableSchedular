@@ -121,93 +121,103 @@ export function exportClassPDF(viewData) {
 
 export function exportFacultyPDF(viewData) {
     const { facultyName, timeSlotConfigs, entries } = viewData;
-    const config = timeSlotConfigs?.[0];
-    if (!config) return;
+    if (!timeSlotConfigs || timeSlotConfigs.length === 0) return;
 
     const doc = new jsPDF({ orientation: 'landscape' });
-    const days = config.days;
-    const slots = config.slots;
 
-    // Title
-    doc.setFillColor(...COLORS.primary);
-    doc.rect(0, 0, 297, 25, 'F');
-    doc.setTextColor(...COLORS.white);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Faculty Timetable: ${facultyName}`, 14, 16);
-    doc.setFontSize(9);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 250, 16);
+    timeSlotConfigs.forEach((config, configIdx) => {
+        // Only keep entries for THIS config's year
+        const yearEntries = entries.filter(e => Number(e.classYear) === Number(config.year));
+        
+        // Skip if no entries for this year and we have multiple configs (unless it's the only config)
+        if (yearEntries.length === 0 && timeSlotConfigs.length > 1) return;
 
-    const head = [['Time', ...days]];
-    const body = [];
+        if (configIdx > 0) doc.addPage();
 
-    for (const slot of slots) {
-        const slotIdx = slots.indexOf(slot);
-        const row = [`${slot.start} - ${slot.end}`];
+        const days = config.days;
+        const slots = config.slots;
 
-        if (slot.type === 'break') {
-            days.forEach(() => row.push('Break'));
-        } else if (slot.type === 'lunch') {
-            days.forEach(() => row.push('Lunch'));
-        } else {
-            for (const day of days) {
-                const entry = entries.find(e => e.day === day && e.slotIndex === slotIdx);
-                if (entry) {
-                    let text = `${entry.subjectCode || entry.subjectName}\n${entry.className}\n${entry.roomName}`;
-                    row.push(text);
-                } else {
-                    row.push('-');
-                }
-            }
-        }
-        body.push(row);
-    }
+        // Title Section
+        doc.setFillColor(...COLORS.primary);
+        doc.rect(0, 0, 297, 25, 'F');
+        doc.setTextColor(...COLORS.white);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Faculty Timetable: ${facultyName}`, 14, 16);
+        doc.setFontSize(9);
+        doc.text(`Year ${config.year} Timings | Generated: ${new Date().toLocaleDateString()}`, 230, 16);
 
-    doc.autoTable({
-        head,
-        body,
-        startY: 30,
-        theme: 'grid',
-        styles: {
-            fontSize: 7.5,
-            cellPadding: 3,
-            textColor: COLORS.text,
-            lineColor: [200, 190, 220],
-            lineWidth: 0.3,
-        },
-        headStyles: {
-            fillColor: COLORS.header,
-            textColor: COLORS.white,
-            fontSize: 8,
-            fontStyle: 'bold',
-            halign: 'center'
-        },
-        columnStyles: {
-            0: { cellWidth: 25, fontStyle: 'bold', fontSize: 7 }
-        },
-        didParseCell: function (data) {
-            if (data.section === 'body') {
-                const text = data.cell.raw;
-                if (text === 'Break') {
-                    data.cell.styles.fillColor = [255, 247, 230];
-                    data.cell.styles.textColor = [180, 130, 20];
-                    data.cell.styles.halign = 'center';
-                } else if (text === 'Lunch') {
-                    data.cell.styles.fillColor = [230, 255, 240];
-                    data.cell.styles.textColor = [20, 130, 60];
-                    data.cell.styles.halign = 'center';
-                } else if (text !== '-' && data.column.index > 0) {
-                    const slotIdx = data.row.index;
-                    const day = days[data.column.index - 1];
-                    const entry = entries.find(e => e.day === day && e.slotIndex === slotIdx);
-                    if (entry?.isLab) {
-                        data.cell.styles.fillColor = [255, 235, 245];
-                    } else if (entry) {
-                        data.cell.styles.fillColor = [235, 235, 255];
+        const head = [['Time', ...days]];
+        const body = [];
+
+        for (const slot of slots) {
+            const slotIdx = slots.indexOf(slot);
+            const row = [`${slot.start} - ${slot.end}`];
+
+            if (slot.type === 'break') {
+                days.forEach(() => row.push('Break'));
+            } else if (slot.type === 'lunch') {
+                days.forEach(() => row.push('Lunch'));
+            } else {
+                for (const day of days) {
+                    const entry = yearEntries.find(e => e.day === day && e.slotIndex === slotIdx);
+                    if (entry) {
+                        let text = `${entry.subjectCode || entry.subjectName}\n${entry.className}\n${entry.roomName}`;
+                        row.push(text);
+                    } else {
+                        row.push('-');
                     }
                 }
             }
+            body.push(row);
         }
+
+        doc.autoTable({
+            head,
+            body,
+            startY: 30,
+            theme: 'grid',
+            styles: {
+                fontSize: 7.5,
+                cellPadding: 3,
+                textColor: COLORS.text,
+                lineColor: [200, 190, 220],
+                lineWidth: 0.3,
+            },
+            headStyles: {
+                fillColor: COLORS.header,
+                textColor: COLORS.white,
+                fontSize: 8,
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            columnStyles: {
+                0: { cellWidth: 25, fontStyle: 'bold', fontSize: 7 }
+            },
+            didParseCell: function (data) {
+                if (data.section === 'body') {
+                    const text = data.cell.raw;
+                    if (text === 'Break') {
+                        data.cell.styles.fillColor = [255, 247, 230];
+                        data.cell.styles.textColor = [180, 130, 20];
+                        data.cell.styles.halign = 'center';
+                    } else if (text === 'Lunch') {
+                        data.cell.styles.fillColor = [230, 255, 240];
+                        data.cell.styles.textColor = [20, 130, 60];
+                        data.cell.styles.halign = 'center';
+                    } else if (text !== '-' && data.column.index > 0) {
+                        const slotIdx = data.row.index;
+                        const day = days[data.column.index - 1];
+                        const entry = yearEntries.find(e => e.day === day && e.slotIndex === slotIdx);
+                        if (entry?.isLab) {
+                            data.cell.styles.fillColor = [255, 235, 245];
+                        } else if (entry) {
+                            data.cell.styles.fillColor = [235, 235, 255];
+                        }
+                    }
+                }
+            }
+        });
     });
 
     doc.save(`${facultyName.replace(/\s+/g, '_')}_Timetable.pdf`);

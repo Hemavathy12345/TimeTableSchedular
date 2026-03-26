@@ -70,8 +70,8 @@ export default function Departments() {
                                 <td><span className="badge badge-theory">{d.code}</span></td>
                                 <td>
                                     <div className="table-actions">
-                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(d)}>✏️ Edit</button>
-                                        <button className="btn btn-danger btn-sm" onClick={() => remove(d.id)}>🗑 Delete</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(d)}>Edit</button>
+                                        <button className="btn btn-danger btn-sm" onClick={() => remove(d.id)}>Delete</button>
                                     </div>
                                 </td>
                             </tr>

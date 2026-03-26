@@ -11,6 +11,67 @@ const STEPS = [
     { label: 'Review & Generate' },
 ];
 
+function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const containerRef = useState(null); 
+
+    // Handle click outside to close
+    useEffect(() => {
+        if (!isOpen) return;
+        const close = (e) => {
+            if (!e.target.closest('.searchable-select-container')) setIsOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [isOpen]);
+
+    const filtered = options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()));
+    const selected = options.find(o => o.id === value);
+
+    const handleToggle = () => {
+        if (!disabled) setIsOpen(!isOpen);
+    };
+
+    const handleSelect = (id) => {
+        onChange(id);
+        setIsOpen(false);
+        setSearch('');
+    };
+
+    return (
+        <div className="searchable-select-container">
+            <div className={`searchable-select-display ${disabled ? 'disabled' : ''}`} 
+                style={{ opacity: disabled ? 0.6 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
+                onClick={handleToggle}>
+                <span style={{ color: selected ? 'inherit' : '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
+                    {selected ? selected.name : placeholder}
+                </span>
+                <span style={{ fontSize: 10, color: '#aaa' }}>{isOpen ? '▲' : '▼'}</span>
+            </div>
+            
+            {isOpen && (
+                <div className="searchable-select-dropdown">
+                    <div className="searchable-select-search">
+                        <input autoFocus placeholder="Search faculty..." value={search} onChange={e => setSearch(e.target.value)} onClick={e => e.stopPropagation()} />
+                    </div>
+                    <div className="searchable-select-options">
+                        <div className={`searchable-select-option ${!value ? 'selected' : ''}`} onClick={() => handleSelect('')}>
+                            {placeholder}
+                        </div>
+                        {filtered.map(o => (
+                            <div key={o.id} className={`searchable-select-option ${o.id === value ? 'selected' : ''}`} onClick={() => handleSelect(o.id)}>
+                                {o.name}
+                            </div>
+                        ))}
+                        {filtered.length === 0 && <div className="searchable-select-option-empty">No results found</div>}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function GenerateWizard() {
     const navigate = useNavigate();
     const { toasts, addToast, removeToast } = useToast();
@@ -35,6 +96,7 @@ export default function GenerateWizard() {
     const [activeClassId, setActiveClassId] = useState(null);
     const [classMappings, setClassMappings] = useState({}); // { classId: { subjectId: { facultyId, labFaculty2Id } } }
     const [savingMappings, setSavingMappings] = useState(false);
+    const [filterDeptId, setFilterDeptId] = useState('');
 
     useEffect(() => { loadAll(); }, []);
 
@@ -56,6 +118,23 @@ export default function GenerateWizard() {
                 labFaculty2Id: mapping.labFaculty2Id || ''
             };
         });
+
+        // Apply Advisor Defaults if missing from DB
+        c.data.forEach(cls => {
+            if (!initialMappings[cls.id]) initialMappings[cls.id] = {};
+            s.data.forEach(sub => {
+                const subName = sub.name.toLowerCase();
+                if (cls.advisorId && (subName === 'library' || subName === 'tutor ward meeting')) {
+                    if (!initialMappings[cls.id][sub.id]?.facultyId) {
+                        initialMappings[cls.id][sub.id] = { 
+                            facultyId: cls.advisorId, 
+                            labFaculty2Id: '' 
+                        };
+                    }
+                }
+            });
+        });
+
         setClassMappings(initialMappings);
         setMappings(m.data);
         
@@ -224,13 +303,13 @@ export default function GenerateWizard() {
                                             return (
                                                 <div key={cId} onClick={() => setActiveClassId(cId)}
                                                     style={{ 
-                                                        padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', 
+                                                        padding: '16px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', 
                                                         background: isActive ? '#eff6ff' : 'transparent',
                                                         borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent'
                                                     }}>
-                                                    <div style={{ fontWeight: 600, fontSize: 13, color: isActive ? 'var(--primary-600)' : 'inherit' }}>{cls.name}</div>
-                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{mappedCount} / {clsSubjects.length} subjects mapped</div>
-                                                    {isComplete ? <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>✅ Complete</span> : null}
+                                                    <div style={{ fontWeight: 700, fontSize: 13, color: isActive ? 'var(--primary-700)' : 'inherit' }}>{cls.name}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{mappedCount} / {clsSubjects.length} mapped</div>
+                                                    {isComplete ? <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 700, marginTop: 4 }}>✅ Complete</div> : null}
                                                 </div>
                                             );
                                         })
@@ -260,36 +339,49 @@ export default function GenerateWizard() {
                                             {relevantSubjects.length === 0 ? (
                                                 <div className="empty-state">No subjects found for Year {ac.year}. Add subjects first.</div>
                                             ) : (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                                                     {relevantSubjects.map(sub => {
                                                         const mappingData = classMappings[activeClassId]?.[sub.id] || { facultyId: '', labFaculty2Id: '' };
+                                                        // Fallback flow: 1. Manual selection 2. Subject department 3. All
+                                                        const rowDeptId = mappingData.tempDeptId ?? sub.departmentId ?? '';
+
                                                         return (
-                                                            <div key={sub.id} style={{ display: 'flex', gap: 16, alignItems: 'center', background: '#f8fafc', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}>
-                                                                <div style={{ flex: '1 1 30%' }}>
-                                                                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-                                                                        <span className={`badge ${sub.type === 'lab' ? 'badge-lab' : sub.type === 'theory' ? 'badge-theory' : sub.type === 'project' ? 'badge-project' : 'badge-elective'}`} style={{ marginRight: 6 }}>{sub.type}</span>
+                                                            <div key={sub.id} style={{ display: 'flex', gap: 20, alignItems: 'center', background: '#fff', padding: '18px 24px', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                                                                <div style={{ flex: '0 0 25%' }}>
+                                                                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
+                                                                        <span className={`badge ${sub.type === 'lab' ? 'badge-lab' : sub.type === 'theory' ? 'badge-theory' : sub.type === 'project' ? 'badge-project' : 'badge-elective'}`} style={{ marginRight: 6, fontSize: 9 }}>{sub.type}</span>
                                                                         {sub.name}
                                                                     </div>
                                                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{sub.code}</div>
                                                                 </div>
-                                                                
-                                                                <div style={{ flex: '1 1 35%' }}>
-                                                                    <select className="form-select" style={{ fontSize: 12 }} 
-                                                                        value={mappingData.facultyId} 
-                                                                        onChange={e => handleMappingChange(activeClassId, sub.id, 'facultyId', e.target.value)}>
-                                                                        <option value="">Select Primary Faculty</option>
-                                                                        {faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+
+                                                                <div style={{ flex: '0 0 20%' }}>
+                                                                    <select className="form-select" style={{ fontSize: 11, height: 38, background: '#fff', border: '1px solid #d1d5db' }} 
+                                                                        value={rowDeptId} 
+                                                                        onChange={e => handleMappingChange(activeClassId, sub.id, 'tempDeptId', e.target.value)}>
+                                                                        <option value="">All Departments</option>
+                                                                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                                                     </select>
+                                                                    <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 6, marginLeft: 2, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dept Filter</div>
+                                                                </div>
+                                                                
+                                                                <div style={{ flex: '1 1 27.5%' }}>
+                                                                    <SearchableSelect 
+                                                                        options={faculty.filter(f => !rowDeptId || f.departmentId === rowDeptId)}
+                                                                        value={mappingData.facultyId}
+                                                                        onChange={val => handleMappingChange(activeClassId, sub.id, 'facultyId', val)}
+                                                                        placeholder="Select Primary Faculty"
+                                                                    />
                                                                 </div>
 
-                                                                <div style={{ flex: '1 1 35%' }}>
-                                                                    <select className="form-select" style={{ fontSize: 12 }} 
-                                                                        value={mappingData.labFaculty2Id} 
-                                                                        onChange={e => handleMappingChange(activeClassId, sub.id, 'labFaculty2Id', e.target.value)}
-                                                                        disabled={sub.type !== 'lab' && sub.type !== 'project'}>
-                                                                        <option value="">{sub.type === 'lab' || sub.type === 'project' ? 'Log Co-Faculty (Optional)' : 'N/A'}</option>
-                                                                        {(sub.type === 'lab' || sub.type === 'project') && faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                                                    </select>
+                                                                <div style={{ flex: '1 1 27.5%' }}>
+                                                                    <SearchableSelect 
+                                                                        options={faculty.filter(f => !rowDeptId || f.departmentId === rowDeptId)}
+                                                                        value={mappingData.labFaculty2Id}
+                                                                        onChange={val => handleMappingChange(activeClassId, sub.id, 'labFaculty2Id', val)}
+                                                                        placeholder={sub.type === 'lab' || sub.type === 'project' ? 'Co-Faculty' : 'N/A'}
+                                                                        disabled={sub.type !== 'lab' && sub.type !== 'project'}
+                                                                    />
                                                                 </div>
                                                             </div>
                                                         );

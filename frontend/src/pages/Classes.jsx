@@ -7,37 +7,41 @@ export default function Classes() {
     const [classes, setClasses] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [rooms, setRooms] = useState([]);
+    const [faculty, setFaculty] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ name: '', year: 1, section: 'A', departmentId: '', defaultRoomId: '' });
+    const [form, setForm] = useState({ name: '', year: 1, section: 'A', departmentId: '', defaultRoomId: '', advisorId: '' });
     const { toasts, addToast, removeToast } = useToast();
 
     useEffect(() => { load(); }, []);
 
     const load = async () => {
-        const [c, d, r] = await Promise.all([api.get('/classes'), api.get('/departments'), api.get('/rooms')]);
-        setClasses(c.data); setDepartments(d.data); setRooms(r.data);
+        const [c, d, r, f] = await Promise.all([api.get('/classes'), api.get('/departments'), api.get('/rooms'), api.get('/faculty')]);
+        setClasses(c.data); setDepartments(d.data); setRooms(r.data); setFaculty(f.data);
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
     const roomName = (id) => rooms.find(r => r.id === id)?.name || '-';
-    const openAdd = () => { 
-        setEditing(null); 
-        setForm({ 
-            name: '', year: 1, section: 'A', 
+    const advisorName = (id) => faculty.find(f => f.id === id)?.name || '-';
+    const openAdd = () => {
+        setEditing(null);
+        setForm({
+            name: '', year: 1, section: 'A',
             departmentId: departments[0]?.id || '',
-            defaultRoomId: '' 
-        }); 
-        setShowModal(true); 
+            defaultRoomId: '',
+            advisorId: ''
+        });
+        setShowModal(true);
     };
-    const openEdit = (c) => { 
-        setEditing(c); 
-        setForm({ 
-            name: c.name, year: c.year, section: c.section, 
+    const openEdit = (c) => {
+        setEditing(c);
+        setForm({
+            name: c.name, year: c.year, section: c.section,
             departmentId: c.departmentId,
-            defaultRoomId: c.defaultRoomId || '' 
-        }); 
-        setShowModal(true); 
+            defaultRoomId: c.defaultRoomId || '',
+            advisorId: c.advisorId || ''
+        });
+        setShowModal(true);
     };
 
     const save = async () => {
@@ -58,14 +62,14 @@ export default function Classes() {
             <ToastContainer toasts={toasts} removeToast={removeToast} />
             <div className="table-header">
                 <div>
-                    <h1 className="page-title">🎓 Classes & Sections</h1>
+                    <h1 className="page-title"> Classes & Sections</h1>
                     <p className="page-subtitle">Manage class sections by year and department</p>
                 </div>
                 <button className="btn btn-primary" onClick={openAdd}>+ Add Class</button>
             </div>
             <div className="data-table-wrapper">
                 <table className="data-table">
-                    <thead><tr><th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Default Room</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Default Room</th><th>Class Advisor</th><th>Actions</th></tr></thead>
                     <tbody>
                         {classes.map(c => (
                             <tr key={c.id}>
@@ -74,10 +78,11 @@ export default function Classes() {
                                 <td><span className="badge badge-success">{c.section}</span></td>
                                 <td>{deptName(c.departmentId)}</td>
                                 <td><span className="badge badge-classroom">{roomName(c.defaultRoomId)}</span></td>
+                                <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{advisorName(c.advisorId)}</td>
                                 <td>
                                     <div className="table-actions">
-                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>✏️</button>
-                                        <button className="btn btn-danger btn-sm" onClick={() => remove(c.id)}>🗑</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
+                                        <button className="btn btn-danger btn-sm" onClick={() => remove(c.id)}>Delete</button>
                                     </div>
                                 </td>
                             </tr>
@@ -116,6 +121,15 @@ export default function Classes() {
                         <option value="">None</option>
                         {rooms.filter(r => r.type === 'classroom').map(r => (
                             <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="form-group">
+                    <label className="form-label">Class Advisor</label>
+                    <select className="form-select" value={form.advisorId} onChange={e => setForm({ ...form, advisorId: e.target.value })}>
+                        <option value="">None</option>
+                        {faculty.map(f => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
                         ))}
                     </select>
                 </div>

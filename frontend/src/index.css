@@ -733,7 +733,8 @@ a:hover {
 
 /* === Wizard === */
 .wizard-container {
-  max-width: 800px;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .wizard-stepper {
@@ -1014,4 +1015,96 @@ a:hover {
 
 .slide-in {
   opacity: 1;
+}
+
+/* === Searchable Select === */
+.searchable-select-container {
+  position: relative;
+  width: 100%;
+}
+
+.searchable-select-display {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 34px;
+}
+
+.searchable-select-display:hover {
+  background: #fafafa;
+}
+
+.searchable-select-display:focus-within {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+}
+
+.searchable-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 1100;
+  margin-top: 4px;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchable-select-search {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.searchable-select-search input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+}
+
+.searchable-select-search input:focus {
+  border-color: #1a73e8;
+}
+
+.searchable-select-options {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.searchable-select-option {
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.searchable-select-option:hover {
+  background: #f1f5f9;
+}
+
+.searchable-select-option.selected {
+  background: #eff6ff;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+.searchable-select-option-empty {
+  color: #999;
+  text-align: center;
+  padding: 20px;
+  cursor: default;
+  font-size: 12px;
 }

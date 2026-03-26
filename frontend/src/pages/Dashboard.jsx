@@ -36,8 +36,8 @@ export default function Dashboard() {
     return (
         <div className="fade-in">
             <div className="page-header">
-                <h1 className="page-title">Welcome back, {user?.name} </h1>
-                <p className="page-subtitle">Here's an overview of your timetable system</p>
+                <h1 className="page-title">Welcome back </h1>
+                <p className="page-subtitle">Here's an overview of timetable system</p>
             </div>
 
             <div className="stat-grid">

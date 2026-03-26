@@ -103,7 +103,7 @@ export default function Subjects() {
     };
 
     const openImport = () => { setImportData([]); setImportErrors([]); setShowImportModal(true); };
-    
+
 
     let filtered = subjects;
     if (filters.dept) filtered = filtered.filter(s => s.departmentId === filters.dept);
@@ -135,7 +135,7 @@ export default function Subjects() {
                         <option value="elective">Elective</option>
                         <option value="Non-Academic">Non-Academic</option>
                     </select>
-                    <button className="btn btn-secondary" onClick={openImport}>Import Excel</button>
+                    {/* <button className="btn btn-secondary" onClick={openImport}>Import Excel</button> */}
                     <button className="btn btn-primary" onClick={openAdd}>+ Add Subject</button>
                 </div>
             </div>
@@ -154,8 +154,8 @@ export default function Subjects() {
                                 <td>{deptName(s.departmentId)}</td>
                                 <td>
                                     <div className="table-actions">
-                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>✏️</button>
-                                        <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}>🗑</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>Edit</button>
+                                        <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}>Delete</button>
                                     </div>
                                 </td>
                             </tr>
