@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/timetable_db';
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+    console.error('❌ MONGODB_URI is not defined in environment variables or .env file');
+    process.exit(1);
+}
 
 async function connectDB() {
     try {
