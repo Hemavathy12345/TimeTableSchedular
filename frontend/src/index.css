@@ -895,10 +895,10 @@ a:hover {
 }
 
 .timetable-slot {
-  padding: 6px 8px;
-  border-radius: 3px;
-  font-size: 11px;
-  min-height: 50px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  min-height: 64px;
 }
 
 .timetable-slot.theory {
@@ -1009,9 +1009,9 @@ a:hover {
 
 /* === Utility === */
 .fade-in {
-  /* no animation */
+  opacity: 1;
 }
 
 .slide-in {
-  /* no animation */
+  opacity: 1;
 }

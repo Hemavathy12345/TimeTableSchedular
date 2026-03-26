@@ -16,7 +16,7 @@ export default function TimetableView() {
     const [faculty, setFaculty] = useState([]);
     const [subjects, setSubjects] = useState([]); // Added
     const [rooms, setRooms] = useState([]);       // Added
-    const [viewMode, setViewMode] = useState('class'); // 'class' | 'faculty' | 'summary'
+    const [viewMode, setViewMode] = useState('class'); // 'class' | 'faculty' | 'lab' | 'summary'
     const [selectedId, setSelectedId] = useState('');
     const [viewData, setViewData] = useState(null);
     const [allocationSummary, setAllocationSummary] = useState(null);
@@ -41,18 +41,18 @@ export default function TimetableView() {
             setFaculty(facRes.data);
             setSubjects(subRes.data);
             setRooms(roomRes.data);
-            
+
             // Auto-select first class if nothing selected
             if (clsRes.data.length > 0 && !selectedId) {
                 setSelectedId(clsRes.data[0].id);
             }
-            
+
             // Load allocation summary
             try {
                 const sumRes = await api.get(`/timetable/${id}/allocation-summary`);
                 setAllocationSummary(sumRes.data);
             } catch (e) { /* summary optional */ }
-            
+
             setLoading(false);
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to load timetable base data');
@@ -61,14 +61,20 @@ export default function TimetableView() {
     };
 
     useEffect(() => {
-        if (selectedId && id) loadView();
+        if (selectedId && id) {
+            setViewData(null); // Clear previous to avoid stale display
+            loadView();
+        }
     }, [selectedId, viewMode, id]);
 
     const loadView = async () => {
+        if (!selectedId) return;
         try {
-            const endpoint = viewMode === 'class'
-                ? `/timetable/${id}/class-view/${selectedId}`
-                : `/timetable/${id}/faculty-view/${selectedId}`;
+            let endpoint;
+            if (viewMode === 'class') endpoint = `/timetable/${id}/class-view/${selectedId}`;
+            else if (viewMode === 'faculty') endpoint = `/timetable/${id}/faculty-view/${selectedId}`;
+            else if (viewMode === 'lab') endpoint = `/timetable/${id}/room-view/${selectedId}`;
+            else return; // summary has no per-entity view
             const res = await api.get(endpoint);
             setViewData(res.data);
         } catch (err) {
@@ -79,10 +85,14 @@ export default function TimetableView() {
     const switchView = (mode) => {
         if (mode === viewMode) return;
         setViewMode(mode);
+        setViewData(null); // Explicit clear
+        const labRooms = rooms.filter(r => r.type === 'lab');
         if (mode === 'class' && classes.length > 0) {
             setSelectedId(classes[0].id);
         } else if (mode === 'faculty' && faculty.length > 0) {
             setSelectedId(faculty[0].id);
+        } else if (mode === 'lab' && labRooms.length > 0) {
+            setSelectedId(labRooms[0].id);
         }
         setSwapMode(false);
         setSwapFirst(null);
@@ -128,9 +138,23 @@ export default function TimetableView() {
 
     // Build the grid
     const renderGrid = () => {
-        if (!viewData) return <div className="empty-state"><p>Select a {viewMode === 'class' ? 'class' : 'faculty member'} to view</p></div>;
+        const entityLabel = viewMode === 'class' ? 'class' : viewMode === 'faculty' ? 'faculty member' : 'lab room';
+        if (!viewData) return <div className="empty-state"><p>Select a {entityLabel} to view</p></div>;
 
-        const config = viewMode === 'class' ? viewData.timeSlotConfig : viewData.timeSlotConfigs?.[0];
+        // Special handling for lab view empty sessions
+        if (viewMode === 'lab' && (!viewData.entries || viewData.entries.length === 0)) {
+            return (
+                <div className="empty-state" style={{ background: 'rgba(6,182,212,0.02)', border: '2px dashed rgba(6,182,212,0.1)', borderRadius: 12 }}>
+                    <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
+                    <h3>No lab sessions scheduled</h3>
+                    <p style={{ maxWidth: 350, margin: '8px auto', fontSize: 13, color: 'var(--text-secondary)' }}>
+                        This lab room is currently free or only contains theory classes which are filtered out of this view.
+                    </p>
+                </div>
+            );
+        }
+
+        const config = (viewMode === 'class' || viewMode === 'lab') ? viewData.timeSlotConfig : viewData.timeSlotConfigs?.[0];
         if (!config) return <div className="empty-state"><p>No time slot configuration found</p></div>;
 
         const days = config.days;
@@ -197,7 +221,7 @@ export default function TimetableView() {
                                             continuation = earlierEntries.find(e => e.duration > offset);
                                             if (continuation) break;
                                         }
- 
+
                                         if (cellEntries.length === 0 && continuation) {
                                             const typeClass = continuation.isLab ? 'lab' : (continuation.subjectType === 'project' ? 'project' : 'theory');
                                             return (
@@ -232,27 +256,56 @@ export default function TimetableView() {
                                         }
                                         return (
                                             <td key={day}>
-                                                <div
-                                                    className={`timetable-slot ${entry.isLab ? 'lab' : 'theory'} ${swapMode && swapFirst === entry._idx ? 'swap-highlight' : ''}`}
-                                                    style={entry.isExtra ? { borderLeft: '3px solid #f59e0b', opacity: 0.88 } : undefined}
-                                                    onClick={() => handleSlotClick(entry, entry._idx)}
-                                                    title={[
-                                                        `${entry.subjectName} (${entry.subjectCode})`,
-                                                        `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
-                                                        `Room: ${entry.roomName}`,
-                                                        entry.isExtra ? 'Extra session (gap-fill)' : '',
-                                                        entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
-                                                    ].filter(Boolean).join('\n')}
-                                                >
-                                                    <div className="slot-subject">
-                                                        {entry.subjectCode || entry.subjectName}
-                                                        {entry.isExtra && <span style={{ fontSize: 9, marginLeft: 3, color: '#f59e0b', fontWeight: 700 }}>+</span>}
-                                                    </div>
-                                                    <div className="slot-faculty">
-                                                        {viewMode === 'class' ? entry.facultyName : entry.className}
-                                                        {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
-                                                    </div>
-                                                    <div className="slot-room">{entry.roomName}</div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                    {cellEntries.map((entry, eIdx) => {
+                                                        const isConf = !!entry.isConflict;
+                                                        const typeClass = entry.isLab ? 'lab' : (entry.subjectType === 'project' ? 'project' : 'theory');
+                                                        const isActive = swapMode && (swapFirst === entry._idx);
+
+                                                        return (
+                                                            <div
+                                                                key={eIdx}
+                                                                className={`timetable-slot ${typeClass} ${isActive ? 'swap-highlight' : ''}`}
+                                                                style={{
+                                                                    cursor: swapMode ? 'pointer' : 'default',
+                                                                    border: isConf ? '2px solid #ef4444' : (entry.isExtra ? '1px solid #f59e0b' : undefined),
+                                                                    background: isConf ? '#fee2e2' : undefined,
+                                                                    minHeight: cellEntries.length > 1 ? 40 : 64,
+                                                                    padding: cellEntries.length > 1 ? '4px 8px' : '10px 12px',
+                                                                    position: 'relative'
+                                                                }}
+                                                                onClick={() => handleSlotClick(entry, entry._idx)}
+                                                                title={[
+                                                                    isConf ? '⚠ OVERLAP DETECTED' : '',
+                                                                    `${entry.subjectName} (${entry.subjectCode})`,
+                                                                    `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
+                                                                    `Room: ${entry.roomName}`,
+                                                                    entry.isExtra ? 'Extra session (gap-fill)' : '',
+                                                                    entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
+                                                                ].filter(Boolean).join('\n')}
+                                                            >
+                                                                {isConf && (
+                                                                    <div style={{ position: 'absolute', top: 2, right: 4, color: '#ef4444', fontSize: 9, fontWeight: 'bold' }}>
+                                                                        ⚠ OVERLAP
+                                                                    </div>
+                                                                )}
+                                                                <div className="slot-subject">
+                                                                    {entry.subjectCode || entry.subjectName}
+                                                                    {entry.isExtra && <span style={{ fontSize: 9, marginLeft: 3, color: '#f59e0b', fontWeight: 700 }}>+</span>}
+                                                                </div>
+                                                                <div className="slot-faculty">
+                                                                    {viewMode === 'lab'
+                                                                        ? `${entry.className} · ${entry.facultyName}`
+                                                                        : viewMode === 'class'
+                                                                            ? entry.facultyName
+                                                                            : entry.className
+                                                                    }
+                                                                    {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
+                                                                </div>
+                                                                {viewMode !== 'lab' && <div className="slot-room">{entry.roomName}</div>}
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </td>
                                         );
@@ -289,7 +342,7 @@ export default function TimetableView() {
                         onClick={() => navigate(`/timetable/${id}/faculty-overview`)}
                         title="View all faculty schedules and detect overlaps"
                     >
-                        👥 Faculty Overview
+                        Faculty Overview
                     </button>
                     <button className="btn btn-primary" onClick={handleExportPDF}>Export PDF</button>
                 </div>
@@ -304,6 +357,9 @@ export default function TimetableView() {
                     <button className={`view-toggle-btn ${viewMode === 'faculty' ? 'active' : ''}`} onClick={() => switchView('faculty')}>
                         Faculty View
                     </button>
+                    <button className={`view-toggle-btn ${viewMode === 'lab' ? 'active' : ''}`} onClick={() => switchView('lab')}>
+                        Lab View
+                    </button>
                     <button className={`view-toggle-btn ${viewMode === 'summary' ? 'active' : ''}`} onClick={() => switchView('summary')}
                         style={{ borderLeft: '2px solid var(--border-color)' }}>
                         Allocation Summary
@@ -314,9 +370,21 @@ export default function TimetableView() {
                     <select className="form-select" style={{ width: 250 }} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
                         {viewMode === 'class'
                             ? classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-                            : faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
+                            : viewMode === 'faculty'
+                                ? faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
+                                : rooms.filter(r => r.type === 'lab').map(r => (
+                                    <option key={r.id} value={r.id}>{r.name} (Cap: {r.capacity || '—'})</option>
+                                ))
                         }
                     </select>
+                )}
+                {viewMode === 'lab' && viewData && (
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ background: 'rgba(6,182,212,0.12)', color: 'rgba(6,182,212,1)', padding: '2px 10px', borderRadius: 999, fontWeight: 600 }}>
+                            Lab View
+                        </span>
+                        {viewData.roomCapacity ? `Capacity: ${viewData.roomCapacity}` : ''}
+                    </span>
                 )}
             </div>
 

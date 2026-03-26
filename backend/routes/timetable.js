@@ -184,7 +184,7 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
         const masterConfig = configs[0] || null;
 
         console.log(`Faculty Overview Debug: tt.entries=${tt.entries.length}, configs=${configs.length}`);
-        const enriched = tt.entries.map(e => {
+        const enriched = tt.entries.map((e, idx) => {
             const cls = classes.find(c => c.id === e.classId);
             const config = configs.find(c => Number(c.year) === Number(cls?.year));
             const startSlot = config?.slots[e.slotIndex];
@@ -196,6 +196,7 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
 
             return {
                 ...e,
+                originalIndex: idx, // Pass the index for the Auto-Resolver
                 subjectName: subjects.find(s => s.id === e.subjectId)?.name || '',
                 subjectCode: subjects.find(s => s.id === e.subjectId)?.code || '',
                 className: cls?.name || '',
@@ -208,6 +209,7 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
             };
         });
 
+        // Group by faculty as requested
         const facultyMap = {};
         const addToFaculty = (facId, entry) => {
             if (!facId) return;
@@ -222,18 +224,75 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
             if (e.labFaculty2Id) addToFaculty(e.labFaculty2Id, e);
         });
 
-        const facultySchedules = Object.values(facultyMap).map(fs => {
-            const slotMap = {};
-            fs.entries.forEach(e => {
-                const key = `${e.day}-${e.slotIndex}`;
-                if (!slotMap[key]) slotMap[key] = [];
-                slotMap[key].push(e);
+        // Detect ALL conflicts (Faculty double-booking and Room double-booking)
+        // We use a global registry to catch cross-faculty room conflicts
+        const facultyRegistry = {}; // { facId-day-slot: entryId }
+        const roomRegistry    = {}; // { roomId-day-slot: entryId }
+        
+        // Helper to mark conflict on both sides
+        const markConflict = (e1, e2, reason) => {
+            e1.isConflict = true;
+            e1.conflictReason = reason;
+            e1.conflictsWith = (e1.conflictsWith || []);
+            e1.conflictsWith.push({ 
+                subjectName: e2.subjectName, 
+                facultyName: e2.facultyName, 
+                className: e2.className, 
+                reason 
             });
+
+            e2.isConflict = true;
+            e2.conflictReason = reason;
+            e2.conflictsWith = (e2.conflictsWith || []);
+            e2.conflictsWith.push({ 
+                subjectName: e1.subjectName, 
+                facultyName: e1.facultyName, 
+                className: e1.className, 
+                reason 
+            });
+        };
+
+        enriched.forEach(e => {
+            const dur = e.duration || 1;
+            for (let d = 0; d < dur; d++) {
+                const daySlot = `${e.day}-${e.slotIndex + d}`;
+                
+                // 1. Faculty Check
+                const fKey = `${e.facultyId}-${daySlot}`;
+                if (facultyRegistry[fKey] && facultyRegistry[fKey] !== e) {
+                    markConflict(e, facultyRegistry[fKey], 'Faculty double-booked');
+                }
+                facultyRegistry[fKey] = e;
+
+                if (e.labFaculty2Id) {
+                    const f2Key = `${e.labFaculty2Id}-${daySlot}`;
+                    if (facultyRegistry[f2Key] && facultyRegistry[f2Key] !== e) {
+                        markConflict(e, facultyRegistry[f2Key], 'Faculty double-booked');
+                    }
+                    facultyRegistry[f2Key] = e;
+                }
+
+                // 2. Room Check (This catches cross-faculty overlaps!)
+                if (e.roomId) {
+                    const rKey = `${e.roomId}-${daySlot}`;
+                    if (roomRegistry[rKey] && roomRegistry[rKey] !== e) {
+                        markConflict(e, roomRegistry[rKey], 'Room double-booked (Used by another faculty)');
+                    }
+                    roomRegistry[rKey] = e;
+                }
+            }
+        });
+
+        const facultySchedules = Object.values(facultyMap).map(fs => {
             const overlaps = [];
-            Object.entries(slotMap).forEach(([key, entries]) => {
-                if (entries.length > 1) {
-                    const [day, slotIndex] = key.split('-');
-                    overlaps.push({ day, slotIndex: parseInt(slotIndex), entries });
+            const seenKeys = new Set();
+            fs.entries.forEach(e => {
+                if (e.isConflict) {
+                    const key = `${e.day}-${e.slotIndex}`;
+                    if (!seenKeys.has(key)) {
+                        seenKeys.add(key);
+                        overlaps.push({ day: e.day, slotIndex: e.slotIndex, reason: e.conflictReason });
+                    }
                 }
             });
             return { ...fs, overlaps };
@@ -390,6 +449,93 @@ router.get('/:id/class-view/:classId', authenticateToken, async (req, res) => {
     }
 });
 
+// PUT /api/timetable/:id/resolve/:entryIndex — Automatic conflict resolver
+router.put('/:id/resolve/:entryIndex', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const tt = await Timetable.findOne({ id: req.params.id });
+        if (!tt) return res.status(404).json({ error: 'Timetable not found' });
+
+        const idx = parseInt(req.params.entryIndex);
+        if (isNaN(idx) || idx < 0 || idx >= tt.entries.length) {
+            return res.status(400).json({ error: 'Invalid entry index' });
+        }
+
+        const target = tt.entries[idx];
+        const duration = target.duration || 1;
+
+        // Load metadata for validation
+        const classes = await Class.find().lean();
+        const cls = classes.find(c => c.id === target.classId);
+        const config = await TimeSlotConfig.findOne({ year: cls?.year || '1' }).lean();
+        if (!config) return res.status(400).json({ error: 'No time slot config for this class year' });
+
+        const days = config.days;
+        const totalSlots = config.slots.length;
+
+        // Find the absolute first DAY and SLOT where:
+        // 1. Faculty is free
+        // 2. Room is free
+        // 3. Class is free
+        // over the entire duration.
+        let found = false;
+        let bestDay = null;
+        let bestSlot = null;
+
+        for (const day of days) {
+            for (let s = 0; s <= totalSlots - duration; s++) {
+                // Check if this slot is a special type (break/lunch)
+                let isBreak = false;
+                for (let d = 0; d < duration; d++) {
+                    const slotType = config.slots[s + d]?.type;
+                    if (slotType === 'break' || slotType === 'lunch') {
+                        isBreak = true;
+                        break;
+                    }
+                }
+                if (isBreak) continue;
+
+                // Check collisions with ALL OTHER entries in this timetable
+                const collisions = tt.entries.filter((e, i) => {
+                    if (i === idx) return false;
+                    const eDur = e.duration || 1;
+                    const overlapDay = (e.day === day);
+                    const overlapTime = (s < e.slotIndex + eDur && s + duration > e.slotIndex);
+                    return overlapDay && overlapTime;
+                });
+
+                const facultyBusy = collisions.some(e => 
+                    e.facultyId === target.facultyId || 
+                    (e.labFaculty2Id && e.labFaculty2Id === target.facultyId) ||
+                    (target.labFaculty2Id && (e.facultyId === target.labFaculty2Id || e.labFaculty2Id === target.labFaculty2Id))
+                );
+                const roomBusy = collisions.some(e => e.roomId === target.roomId);
+                const classBusy = collisions.some(e => e.classId === target.classId);
+
+                if (!facultyBusy && !roomBusy && !classBusy) {
+                    bestDay = day;
+                    bestSlot = s;
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+        }
+
+        if (!found) {
+            return res.status(400).json({ error: 'No free slot found in the entire week for this faculty/room/class combination.' });
+        }
+
+        // Apply shift
+        tt.entries[idx].day = bestDay;
+        tt.entries[idx].slotIndex = bestSlot;
+        await tt.save();
+
+        res.json({ message: `Successfully moved session to ${bestDay} at slot ${bestSlot}`, entry: tt.entries[idx] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/timetable/:id/faculty-view/:facultyId
 router.get('/:id/faculty-view/:facultyId', authenticateToken, async (req, res) => {
     try {
@@ -431,6 +577,74 @@ router.get('/:id/faculty-view/:facultyId', authenticateToken, async (req, res) =
             facultyName: fac?.name || '',
             timeSlotConfigs: configs,
             entries: enriched
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+// GET /api/timetable/:id/room-view/:roomId
+router.get('/:id/room-view/:roomId', authenticateToken, async (req, res) => {
+    try {
+        const tt = await Timetable.findOne({ id: req.params.id }).lean();
+        if (!tt) return res.status(404).json({ error: 'Timetable not found' });
+
+
+        const room = await Room.findOne({ id: req.params.roomId }).lean();
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        const [subjects, faculty, classes, configs, rooms] = await Promise.all([
+            Subject.find().lean(),
+            Faculty.find().lean(),
+            Class.find().lean(),
+            TimeSlotConfig.find().lean(),
+            Room.find().lean()
+        ]);
+
+        const roomEntries = tt.entries.filter(e => {
+            if (e.roomId !== req.params.roomId) return false;
+            if (e.isLab) return true;
+            // Fallback for older timetables: check subject type
+            const subject = subjects.find(s => s.id === e.subjectId);
+            return subject?.type === 'lab';
+        });
+
+        const enriched = roomEntries.map(e => {
+            const cls    = classes.find(c => c.id === e.classId);
+            const config = configs.find(c => Number(c.year) === Number(cls?.year));
+            const startSlot = config?.slots[e.slotIndex];
+            const endSlot   = config?.slots[e.slotIndex + (e.duration || 1) - 1];
+            const roomObj   = rooms.find(r => r.id === e.roomId);
+            return {
+                ...e,
+                subjectName:     subjects.find(s => s.id === e.subjectId)?.name || '',
+                subjectCode:     subjects.find(s => s.id === e.subjectId)?.code || '',
+                className:       cls?.name || 'Unknown Class',
+                classYear:       cls?.year || '',
+                facultyName:     faculty.find(f => f.id === e.facultyId)?.name || '',
+                roomName:        roomObj?.name || '',
+                labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : '',
+                startTime:       startSlot?.start || '',
+                endTime:         endSlot?.end || ''
+            };
+        });
+
+        // Use first config year found in room entries for slot layout
+        const years = [...new Set(roomEntries.map(e => {
+            const cls = classes.find(c => c.id === e.classId);
+            return cls?.year;
+        }).filter(Boolean))];
+        const roomConfigs = configs.filter(c => years.includes(c.year));
+        // Fallback: use first config if no entries have year info
+        const displayConfig = roomConfigs[0] || configs[0] || null;
+
+        res.json({
+            roomName:       room.name,
+            roomType:       room.type,
+            roomCapacity:   room.capacity || '',
+            timeSlotConfig: displayConfig,
+            entries:        enriched
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

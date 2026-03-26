@@ -16,6 +16,11 @@ const minsToTime = (mins) => {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 };
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_LABEL_WIDTH = 68; // px, fixed for left column
+const ROW_HEIGHT = 52;      // px per day row
+const RULER_HEIGHT = 36;    // px for top ruler
+
 export default function FacultyOverview() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -24,10 +29,9 @@ export default function FacultyOverview() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
+    const [tooltip, setTooltip] = useState(null); // { text, x, y }
 
-    useEffect(() => {
-        loadOverview();
-    }, [id]);
+    useEffect(() => { loadOverview(); }, [id]);
 
     const loadOverview = async () => {
         try {
@@ -61,14 +65,54 @@ export default function FacultyOverview() {
         fs.facultyName.toLowerCase().includes(search.toLowerCase())
     );
 
-    const totalOverlaps = facultySchedules.reduce((sum, fs) => sum + fs.overlaps.length, 0);
-    const facultiesWithOverlaps = facultySchedules.filter(fs => fs.overlaps.length > 0);
+    // Recalculate total overlaps across all faculty for the indicator header
+    let computedTotalConflicts = 0;
+    facultySchedules.forEach(fs => {
+        const dayRows = {};
+        fs.entries.forEach(e => {
+            if (!dayRows[e.day]) dayRows[e.day] = [];
+            dayRows[e.day].push(e);
+        });
 
-    // Prepare timeline dimensions
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
-    // Find absolute bounds for the x-axis across ALL entries and ALL slots
-    let minMins = 24 * 60; 
+        // For each day, find entries that overlap in time
+        Object.values(dayRows).forEach(dayEntries => {
+            dayEntries.forEach((e, idx) => {
+                const s1 = timeToMins(e.startTime);
+                const e1 = timeToMins(e.endTime);
+                if (!s1 || !e1) return;
+
+                const hasOverlap = dayEntries.some((ee, idx2) => {
+                    if (idx === idx2) return false;
+                    const s2 = timeToMins(ee.startTime);
+                    const e2 = timeToMins(ee.endTime);
+                    return s1 < e2 && e1 > s2;
+                });
+
+                if (hasOverlap) computedTotalConflicts++;
+            });
+        });
+    });
+    // Divide by 2 because each pair of overlapping sessions was counted twice (e1 overlaps e2 AND e2 overlaps e1)
+    // Actually, let's just count unique 'slots' or just use the number of clashing entries.
+    const totalOverlaps = Math.ceil(computedTotalConflicts / 2);
+    const facultiesWithOverlaps = facultySchedules.filter(fs => {
+        // Find if this faculty has any entries with time overlaps
+        const dayRows = {};
+        fs.entries.forEach(e => {
+            if (!dayRows[e.day]) dayRows[e.day] = [];
+            dayRows[e.day].push(e);
+        });
+        return Object.values(dayRows).some(dayEntries =>
+            dayEntries.some((e, i) => {
+                const s1 = timeToMins(e.startTime);
+                const e1 = timeToMins(e.endTime);
+                return dayEntries.some((ee, j) => i !== j && s1 < timeToMins(ee.endTime) && e1 > timeToMins(ee.startTime));
+            })
+        );
+    });
+
+    // Compute global time bounds (snapped to hours)
+    let minMins = 24 * 60;
     let maxMins = 0;
 
     facultySchedules.forEach(fs => {
@@ -77,45 +121,62 @@ export default function FacultyOverview() {
             if (e.endTime) maxMins = Math.max(maxMins, timeToMins(e.endTime));
         });
     });
-
     allConfigs.forEach(cfg => {
         cfg.slots.forEach(s => {
-            minMins = Math.min(minMins, timeToMins(s.start));
-            maxMins = Math.max(maxMins, timeToMins(s.end));
+            if (s.start) minMins = Math.min(minMins, timeToMins(s.start));
+            if (s.end) maxMins = Math.max(maxMins, timeToMins(s.end));
         });
     });
 
-    // Fallback if no slots/entries
     if (minMins > maxMins) { minMins = 8 * 60; maxMins = 17 * 60; }
-    
-    // Add small padding to left/right for aesthetics (30 mins)
-    minMins = Math.floor(minMins / 60) * 60; // Snap to hour
-    maxMins = Math.ceil(maxMins / 60) * 60;   // Snap to hour
+    minMins = Math.floor(minMins / 60) * 60;
+    maxMins = Math.ceil(maxMins / 60) * 60;
     const totalDuration = maxMins - minMins;
 
-    const getLeftPercent = (timeStr) => ((timeToMins(timeStr) - minMins) / totalDuration) * 100;
-    const getWidthPercent = (start, end) => ((timeToMins(end) - timeToMins(start)) / totalDuration) * 100;
+    // Convert time → % position within the track
+    const toPct = (timeStr) => ((timeToMins(timeStr) - minMins) / totalDuration) * 100;
+    const widthPct = (start, end) => ((timeToMins(end) - timeToMins(start)) / totalDuration) * 100;
 
-    // Collect all unique non-class slots (Gaps) for background rendering
-    const uniqueGaps = [];
-    allConfigs.forEach(cfg => {
-        cfg.slots.forEach(s => {
-            if (s.type !== 'class') {
-                const exists = uniqueGaps.find(g => g.start === s.start && g.end === s.end && g.type === s.type);
-                if (!exists) uniqueGaps.push(s);
-            }
-        });
-    });
+    // Ruler tick marks (every hour)
+    const hourCount = Math.ceil(totalDuration / 60) + 1;
+    const ticks = Array.from({ length: hourCount }, (_, i) => {
+        const m = minMins + i * 60;
+        return m <= maxMins ? m : null;
+    }).filter(Boolean);
 
     return (
-        <div className="fade-in" style={{ minHeight: '100vh' }}>
+        <div className="fade-in" style={{ minHeight: '100vh', position: 'relative' }}>
+
+            {/* Floating Tooltip */}
+            {tooltip && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: tooltip.x + 12,
+                        top: tooltip.y - 8,
+                        zIndex: 9999,
+                        background: 'rgba(15,23,42,0.98)',
+                        color: '#f1f5f9',
+                        borderRadius: 10,
+                        padding: '12px 16px',
+                        fontSize: 12,
+                        lineHeight: 1.7,
+                        boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        maxWidth: 240,
+                        whiteSpace: 'pre-line',
+                        pointerEvents: 'none'
+                    }}
+                >
+                    {tooltip.text}
+                </div>
+            )}
+
             {/* Header */}
             <div className="table-header" style={{ marginBottom: 20 }}>
                 <div>
-                    <h1 className="page-title">👥 Faculty Overview</h1>
-                    <p className="page-subtitle">
-                        {timetableName} — Gantt Chart Timeline
-                    </p>
+                    <h1 className="page-title">Faculty Overview</h1>
+                    <p className="page-subtitle">{timetableName} — Gantt Chart Timeline</p>
                 </div>
                 <div className="btn-group">
                     <button className="btn btn-secondary" onClick={() => navigate(`/timetable/${id}`)}>
@@ -125,12 +186,7 @@ export default function FacultyOverview() {
             </div>
 
             {/* Summary Strip */}
-            <div style={{
-                display: 'flex',
-                gap: 12,
-                flexWrap: 'wrap',
-                marginBottom: 20
-            }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
                 <div style={summaryCard('#10b981', '#d1fae5')}>
                     <div style={{ fontSize: 26, fontWeight: 700 }}>{facultySchedules.length}</div>
                     <div style={{ fontSize: 12, opacity: 0.8 }}>Total Faculty</div>
@@ -139,30 +195,20 @@ export default function FacultyOverview() {
                     <div style={{ fontSize: 26, fontWeight: 700 }}>{totalOverlaps}</div>
                     <div style={{ fontSize: 12, opacity: 0.8 }}>Total Overlaps</div>
                 </div>
-                {facultiesWithOverlaps.length > 0 && facultiesWithOverlaps.map(fs => (
-                    <div key={fs.facultyId} style={summaryCard('#ef4444', '#fee2e2')}>
-                        <div style={{ fontSize: 16, fontWeight: 700 }}>{fs.overlaps.length}</div>
-                        <div style={{ fontSize: 11, opacity: 0.85, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            ⚠ {fs.facultyName}
-                        </div>
-                    </div>
-                ))}
             </div>
 
-            {/* Legend */}
+            {/* Legend + Search */}
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: 4, background: 'rgba(139,92,246,0.8)', border: '1px solid rgba(139,92,246,1)' }}></div>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Theory session</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: 4, background: 'rgba(6,182,212,0.8)', border: '1px solid rgba(6,182,212,1)' }}></div>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Lab session</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: 4, background: 'rgba(239,68,68,0.9)', border: '2px solid #b91c1c' }}></div>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Conflict / Double-booked</span>
-                </div>
+                {[
+                    { color: 'rgba(139,92,246,0.85)', label: 'Theory session' },
+                    { color: 'rgba(6,182,212,0.85)', label: 'Lab session' },
+                    { color: 'rgba(239,68,68,0.90)', label: 'Conflict / Double-booked' },
+                ].map(({ color, label, border }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 16, height: 16, borderRadius: 3, background: color, border: border || '1px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
+                    </div>
+                ))}
                 <div style={{ marginLeft: 'auto' }}>
                     <input
                         className="form-input"
@@ -174,188 +220,320 @@ export default function FacultyOverview() {
                 </div>
             </div>
 
-            {/* Per-Faculty Gantt Cards */}
+            {/* No results */}
             {filtered.length === 0 && (
                 <div className="empty-state"><p>No faculty match your search.</p></div>
             )}
 
-            {filtered.map(fs => {
-                return (
-                    <div key={fs.facultyId} style={{
-                        marginBottom: 32,
-                        borderRadius: 'var(--radius-lg)',
-                        overflow: 'hidden',
-                        border: fs.overlaps.length > 0
-                            ? '1.5px solid rgba(239,68,68,0.5)'
-                            : '1px solid var(--border)',
-                        background: 'var(--surface)',
-                        boxShadow: fs.overlaps.length > 0
-                            ? '0 0 0 3px rgba(239,68,68,0.08)'
-                            : 'var(--shadow-sm)'
-                    }}>
-                        {/* Faculty card header */}
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 12,
-                            padding: '12px 16px',
-                            background: 'var(--surface-hover)',
-                            borderBottom: '1px solid var(--border)'
-                        }}>
-                            <div style={{
-                                width: 36, height: 36, borderRadius: '50%',
-                                background: 'var(--gradient-primary)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontWeight: 700, fontSize: 16, color: '#fff', flexShrink: 0
+            {/* Per-Faculty Gantt Cards */}
+            {filtered.map(fs => (
+                <FacultyGanttCard
+                    key={fs.facultyId}
+                    fs={fs}
+                    ticks={ticks}
+                    minMins={minMins}
+                    totalDuration={totalDuration}
+                    toPct={toPct}
+                    widthPct={widthPct}
+                    setTooltip={setTooltip}
+                    ROW_HEIGHT={ROW_HEIGHT}
+                    RULER_HEIGHT={RULER_HEIGHT}
+                    DAY_LABEL_WIDTH={DAY_LABEL_WIDTH}
+                />
+            ))}
+        </div>
+    );
+}
+
+/* ─────────────────────────────────────────────────────── */
+/*  Single faculty Gantt card                              */
+/* ─────────────────────────────────────────────────────── */
+function FacultyGanttCard({
+    fs, ticks, minMins, totalDuration, toPct, widthPct,
+    setTooltip,
+    ROW_HEIGHT, RULER_HEIGHT, DAY_LABEL_WIDTH
+}) {
+    // Re-detect conflicts for this faculty card specifically
+    const dayRows = {};
+    fs.entries.forEach(e => {
+        if (!dayRows[e.day]) dayRows[e.day] = [];
+        dayRows[e.day].push(e);
+    });
+
+    let conflictsCount = 0;
+    Object.values(dayRows).forEach(de => {
+        de.forEach((e, i) => {
+            const s1 = timeToMins(e.startTime);
+            const e1 = timeToMins(e.endTime);
+            if (!s1 || !e1) return;
+            if (de.some((ee, j) => i !== j && s1 < timeToMins(ee.endTime) && e1 > timeToMins(ee.startTime))) {
+                conflictsCount++;
+            }
+        });
+    });
+    const finalCount = Math.ceil(conflictsCount / 2);
+    const hasConflict = finalCount > 0;
+
+    return (
+        <div style={{
+            marginBottom: 28,
+            borderRadius: 'var(--radius-lg)',
+            border: hasConflict ? '1.5px solid rgba(239,68,68,0.45)' : '1px solid var(--border)',
+            background: 'var(--surface)',
+            boxShadow: hasConflict ? '0 0 0 3px rgba(239,68,68,0.07)' : 'var(--shadow-sm)',
+            overflow: 'hidden',
+        }}>
+            {/* Card Header */}
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 20px',
+                background: 'var(--surface-hover)',
+                borderBottom: '1px solid var(--border)',
+            }}>
+                <div style={{
+                    width: 38, height: 38, borderRadius: '50%',
+                    background: 'var(--gradient-primary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: 16, color: '#fff', flexShrink: 0,
+                }}>
+                    {fs.facultyName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>{fs.facultyName}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {fs.entries.length} session{fs.entries.length !== 1 ? 's' : ''} scheduled
+                        {hasConflict && (
+                            <span style={{
+                                marginLeft: 8, color: '#ef4444', fontWeight: 600,
+                                background: 'rgba(239,68,68,0.1)', padding: '1px 8px', borderRadius: 999
                             }}>
-                                {fs.facultyName.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                                <div style={{ fontWeight: 600, fontSize: 15 }}>{fs.facultyName}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    {fs.entries.length} session{fs.entries.length !== 1 ? 's' : ''} scheduled
-                                    {fs.overlaps.length > 0 && (
+                                ⚠ {finalCount} conflict{finalCount !== 1 ? 's' : ''}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Gantt Body */}
+            <div style={{ padding: '0 16px 16px 16px', overflowX: 'auto', background: 'var(--bg-color)' }}>
+                {/* We use a fixed min-width so the chart is readable even on small screens */}
+                <div style={{ minWidth: 640 }}>
+
+                    {/* ── Ruler row ── */}
+                    <div style={{ display: 'flex', height: RULER_HEIGHT, marginBottom: 4 }}>
+                        {/* left spacer aligned with day label column */}
+                        <div style={{ width: DAY_LABEL_WIDTH, flexShrink: 0 }} />
+                        {/* ruler strip */}
+                        <div style={{ flex: 1, position: 'relative' }}>
+                            {/* baseline */}
+                            <div style={{
+                                position: 'absolute',
+                                left: 0, right: 0, bottom: 0,
+                                height: 1,
+                                background: 'var(--border)',
+                            }} />
+                            {ticks.map((m, i) => {
+                                const pct = ((m - minMins) / totalDuration) * 100;
+                                const isFirst = i === 0;
+                                const isLast = i === ticks.length - 1;
+                                return (
+                                    <div key={m} style={{
+                                        position: 'absolute',
+                                        left: `${pct}%`,
+                                        bottom: 0,
+                                        // For last tick, shift label left so it doesn't clip
+                                        transform: isLast ? 'translateX(-100%)' : isFirst ? 'none' : 'translateX(-50%)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: isFirst ? 'flex-start' : isLast ? 'flex-end' : 'center',
+                                    }}>
                                         <span style={{
-                                            marginLeft: 8, color: '#ef4444', fontWeight: 600,
-                                            background: 'rgba(239,68,68,0.1)', padding: '1px 8px', borderRadius: 999
+                                            fontSize: 10,
+                                            fontWeight: 600,
+                                            color: 'var(--text-muted)',
+                                            lineHeight: 1,
+                                            marginBottom: 3,
+                                            userSelect: 'none',
                                         }}>
-                                            ⚠ {fs.overlaps.length} conflict{fs.overlaps.length !== 1 ? 's' : ''}
+                                            {minsToTime(m)}
                                         </span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Gantt Chart Area */}
-                        <div style={{ 
-                            padding: '24px 16px 16px 16px',
-                            minHeight: 200,
-                            overflowX: 'auto',
-                            background: 'var(--bg-color)' 
-                        }}>
-                            {/* X-Axis Timeline (Ruler at top) — offset by 80px for day label */}
-                            <div style={{ display: 'flex', marginBottom: 16 }}>
-                                {/* Spacer for day label column */}
-                                <div style={{ width: 80, flexShrink: 0 }} />
-                                {/* Ruler */}
-                                <div style={{ flexGrow: 1, position: 'relative', height: 24, borderBottom: '1px solid var(--border)' }}>
-                                    {Array.from({ length: Math.ceil(totalDuration / 60) + 1 }).map((_, i) => {
-                                        const m = minMins + (i * 60);
-                                        if (m > maxMins) return null;
-                                        const pct = ((m - minMins) / totalDuration) * 100;
-                                        return (
-                                            <div key={i} style={{ position: 'absolute', left: `${pct}%`, top: 0, bottom: -10, borderLeft: '1px solid var(--border)', zIndex: 0 }}>
-                                                <div style={{ position: 'absolute', left: -16, top: -20, fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, width: 32, textAlign: 'center' }}>
-                                                    {minsToTime(m)}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Day Rows (stripes rendered inside each row track for correct alignment) */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                {days.map(day => {
-                                    const dayEntries = fs.entries.filter(e => e.day === day);
-
-                                    return (
-                                        <div key={day} style={{ display: 'flex', height: 48, alignItems: 'center' }}>
-                                            {/* Y-Axis Label */}
-                                            <div style={{ width: 80, flexShrink: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'right', paddingRight: 16 }}>
-                                                {day.substring(0, 3).toUpperCase()}
-                                            </div>
-
-                                            {/* Row Track */}
-                                            <div style={{ flexGrow: 1, position: 'relative', height: '100%', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-
-                                                {/* Break/Lunch/Activity stripes — perfectly aligned with sessions */}
-                                                {uniqueGaps.map((slot, idx) => {
-                                                    const left = getLeftPercent(slot.start);
-                                                    const width = getWidthPercent(slot.start, slot.end);
-                                                    return (
-                                                        <div key={`gap-${idx}`} style={{
-                                                            position: 'absolute',
-                                                            left: `${left}%`,
-                                                            width: `${width}%`,
-                                                            top: 0,
-                                                            bottom: 0,
-                                                            background: slot.type === 'lunch' ? 'rgba(16,185,129,0.08)' : (slot.type === 'activity' ? 'rgba(139,92,246,0.06)' : 'rgba(245,158,11,0.08)'),
-                                                            borderLeft: '1px dashed rgba(0,0,0,0.1)',
-                                                            borderRight: '1px dashed rgba(0,0,0,0.1)',
-                                                            zIndex: 0,
-                                                            pointerEvents: 'none',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center'
-                                                        }}>
-                                                            <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 8, color: 'var(--text-muted)', opacity: 0.6, letterSpacing: 1 }}>
-                                                                {slot.type.toUpperCase()}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
-
-                                                {/* Session blocks */}
-                                                {dayEntries.map((e, idx) => {
-                                                    if (!e.startTime || !e.endTime) return null;
-
-                                                    const isOverlap = fs.overlaps.some(o => o.day === e.day && o.slotIndex === e.slotIndex);
-                                                    const left = getLeftPercent(e.startTime);
-                                                    const width = getWidthPercent(e.startTime, e.endTime);
-
-                                                    const sharingEntries = dayEntries.filter(ee => ee.slotIndex === e.slotIndex);
-                                                    const sharingIndex = sharingEntries.findIndex(ee => ee.subjectId === e.subjectId && ee.classId === e.classId);
-                                                    const topOffset = isOverlap ? sharingIndex * 6 : 0;
-                                                    const zIndex = isOverlap ? 10 + sharingIndex : 5;
-
-                                                    return (
-                                                        <div key={idx} style={{
-                                                            position: 'absolute',
-                                                            left: `${left}%`,
-                                                            width: `${width}%`,
-                                                            top: 4 + topOffset,
-                                                            height: 36,
-                                                            borderRadius: 4,
-                                                            background: isOverlap
-                                                                ? 'rgba(239,68,68,0.95)'
-                                                                : e.isLab
-                                                                    ? 'rgba(6,182,212,0.9)'
-                                                                    : 'rgba(139,92,246,0.9)',
-                                                            border: isOverlap ? '2px solid #7f1d1d' : '1px solid rgba(255,255,255,0.2)',
-                                                            color: '#fff',
-                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                                            display: 'flex',
-                                                            flexDirection: 'column',
-                                                            justifyContent: 'center',
-                                                            padding: '0 6px',
-                                                            overflow: 'hidden',
-                                                            zIndex: zIndex,
-                                                            transition: 'transform 0.2s',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                        title={`${e.subjectName} (${e.subjectCode})\nClass: ${e.className}\nRoom: ${e.roomName}\nTime: ${e.startTime}-${e.endTime}`}
-                                                        onMouseEnter={ev => ev.currentTarget.style.transform = 'translateY(-2px)'}
-                                                        onMouseLeave={ev => ev.currentTarget.style.transform = 'translateY(0)'}
-                                                        >
-                                                            <div style={{ fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                                                {isOverlap && '⚠ '}{e.subjectCode}
-                                                            </div>
-                                                            <div style={{ fontSize: 9, opacity: 0.9, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                                                {e.className} • {e.roomName}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        <div style={{ width: 1, height: 6, background: 'var(--border)' }} />
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
-                );
-            })}
+
+                    {/* ── Day Rows ── */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {DAYS.map((day, dayIdx) => {
+                            const dayEntries = fs.entries.filter(e => e.day === day);
+
+                            return (
+                                <div key={day} style={{ display: 'flex', alignItems: 'center', height: ROW_HEIGHT }}>
+                                    {/* Day label */}
+                                    <div style={{
+                                        width: DAY_LABEL_WIDTH, flexShrink: 0,
+                                        fontSize: 11, fontWeight: 700,
+                                        color: 'var(--text-secondary)',
+                                        textAlign: 'right',
+                                        paddingRight: 12,
+                                        letterSpacing: '0.05em',
+                                        userSelect: 'none',
+                                    }}>
+                                        {day.substring(0, 3).toUpperCase()}
+                                    </div>
+
+                                    {/* Track */}
+                                    <div style={{
+                                        flex: 1,
+                                        position: 'relative',
+                                        height: '100%',
+                                        borderRadius: 6,
+                                        background: dayIdx % 2 === 0 ? 'var(--surface)' : 'var(--surface-hover)',
+                                        border: '1px solid var(--glass-border)',
+                                        overflow: 'hidden',
+                                    }}>
+                                        {/* Vertical hour gridlines */}
+                                        {ticks.map(m => {
+                                            const pct = ((m - minMins) / totalDuration) * 100;
+                                            return (
+                                                <div key={m} style={{
+                                                    position: 'absolute',
+                                                    left: `${pct}%`,
+                                                    top: 0, bottom: 0,
+                                                    width: 1,
+                                                    background: 'rgba(148,163,184,0.12)',
+                                                    zIndex: 0,
+                                                    pointerEvents: 'none',
+                                                }} />
+                                            );
+                                        })}
+
+                                        {/* Session blocks */}
+                                        {dayEntries.map((e, idx) => {
+                                            if (!e.startTime || !e.endTime) return null;
+
+                                            const startM = timeToMins(e.startTime);
+                                            const endM = timeToMins(e.endTime);
+
+                                            // Detect conflict via time overlap in frontend for robustness
+                                            const clashingSessions = dayEntries.filter(ee => {
+                                                if (ee === e) return false;
+                                                const s2 = timeToMins(ee.startTime);
+                                                const e2 = timeToMins(ee.endTime);
+                                                return (startM < e2 && endM > s2);
+                                            });
+
+                                            const isConflict = !!e.isConflict || clashingSessions.length > 0;
+
+                                            const left = toPct(e.startTime);
+                                            const width = widthPct(e.startTime, e.endTime);
+
+                                            // Stack overlapping sessions 
+                                            const allOverlappers = [...clashingSessions, e].sort((a, b) => {
+                                                const tA = timeToMins(a.startTime);
+                                                const tB = timeToMins(b.startTime);
+                                                if (tA !== tB) return tA - tB;
+                                                return (a.subjectId + a.classId).localeCompare(b.subjectId + b.classId);
+                                            });
+                                            const sibIdx = allOverlappers.indexOf(e);
+
+                                            // Dynamic layout for clashing blocks
+                                            const isStacked = allOverlappers.length > 1;
+                                            const blockHeight = isStacked ? 22 : ROW_HEIGHT - 12;
+                                            const stackOffset = sibIdx * 24;
+
+                                            const bg = isConflict
+                                                ? 'linear-gradient(135deg, #ef4444, #991b1b)'
+                                                : e.isLab
+                                                    ? 'linear-gradient(135deg, #0891b2, #0e7490)'
+                                                    : 'linear-gradient(135deg, #7c3aed, #5b21b6)';
+
+                                            let tooltipText =
+                                                `${e.subjectName} (${e.subjectCode})\n` +
+                                                `Class: ${e.className}\n` +
+                                                `Room: ${e.roomName || '—'}\n` +
+                                                `${e.startTime} – ${e.endTime}`;
+
+                                            if (isConflict) {
+                                                tooltipText += '\n\n⚠ CONFLICT DETECTED';
+                                                if (e.conflictsWith && e.conflictsWith.length > 0) {
+                                                    e.conflictsWith.forEach(c => {
+                                                        tooltipText += `\n- ${c.facultyName} (${c.subjectName}): ${c.reason}`;
+                                                    });
+                                                } else {
+                                                    tooltipText += `\nOverlap with ${clashingSessions.length} other session(s)`;
+                                                }
+                                            }
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        left: `${left}%`,
+                                                        width: `${width}%`,
+                                                        top: 6 + stackOffset,
+                                                        height: blockHeight,
+                                                        borderRadius: isStacked ? 3 : 5,
+                                                        background: bg,
+                                                        border: isConflict
+                                                            ? '2px solid #450a0a'
+                                                            : '1px solid rgba(255,255,255,0.25)',
+                                                        color: '#fff',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        justifyContent: 'center',
+                                                        padding: '0 7px',
+                                                        overflow: 'hidden',
+                                                        zIndex: 5 + sibIdx,
+                                                        cursor: 'pointer',
+                                                        boxShadow: isConflict ? '0 4px 12px rgba(220,38,38,0.4)' : '0 2px 6px rgba(0,0,0,0.18)',
+                                                        transition: 'all 0.15s ease',
+                                                        boxSizing: 'border-box',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                    onMouseEnter={(ev) => {
+                                                        ev.currentTarget.style.filter = 'brightness(1.12)';
+                                                        ev.currentTarget.style.transform = 'translateY(-1px)';
+                                                        const rect = ev.currentTarget.getBoundingClientRect();
+                                                        setTooltip({
+                                                            text: tooltipText,
+                                                            x: rect.left,
+                                                            y: rect.top
+                                                        });
+                                                    }}
+                                                    onMouseLeave={(ev) => {
+                                                        ev.currentTarget.style.filter = '';
+                                                        ev.currentTarget.style.transform = '';
+                                                        setTooltip(null);
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        fontSize: 11, fontWeight: 700,
+                                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                                        lineHeight: 1.2,
+                                                    }}>
+                                                        {isConflict && '⚠ '}{e.subjectCode}
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: 9, opacity: 0.88,
+                                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                                        lineHeight: 1.2, marginTop: 1,
+                                                    }}>
+                                                        {e.className} • {e.roomName || '—'}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
@@ -370,6 +548,6 @@ function summaryCard(color, bg) {
         color: color,
         minWidth: 80,
         textAlign: 'center',
-        flexShrink: 0
+        flexShrink: 0,
     };
 }
