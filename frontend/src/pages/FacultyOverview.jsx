@@ -46,7 +46,7 @@ export default function FacultyOverview() {
 
     const handleResolve = async (entryIndex, subjectName) => {
         if (!window.confirm(`Attempt to automatically move "${subjectName}" to the first available free slot for this faculty, room, and class?`)) return;
-        
+
         setLoading(true);
         try {
             await api.put(`/timetable/${id}/resolve/${entryIndex}`);
@@ -67,7 +67,7 @@ export default function FacultyOverview() {
 
     if (error) return (
         <div className="fade-in">
-            <div style={{ color: 'var(--danger)', padding: 24 }}>⚠ {error}</div>
+            <div style={{ color: 'var(--danger)', padding: 24 }}> {error}</div>
         </div>
     );
 
@@ -322,25 +322,22 @@ function FacultyGanttCard({
                                 marginLeft: 8, color: '#ef4444', fontWeight: 600,
                                 background: 'rgba(239,68,68,0.1)', padding: '1px 8px', borderRadius: 999
                             }}>
-                                ⚠ {finalCount} conflict{finalCount !== 1 ? 's' : ''}
+                                {finalCount} conflict{finalCount !== 1 ? 's' : ''}
                             </span>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* Gantt Body */}
             <div style={{ padding: '0 16px 16px 16px', overflowX: 'auto', background: 'var(--bg-color)' }}>
-                {/* We use a fixed min-width so the chart is readable even on small screens */}
+         
                 <div style={{ minWidth: 640 }}>
-
-                    {/* ── Ruler row ── */}
                     <div style={{ display: 'flex', height: RULER_HEIGHT, marginBottom: 4 }}>
-                        {/* left spacer aligned with day label column */}
+                    
                         <div style={{ width: DAY_LABEL_WIDTH, flexShrink: 0 }} />
-                        {/* ruler strip */}
+                    
                         <div style={{ flex: 1, position: 'relative' }}>
-                            {/* baseline */}
+                        
                             <div style={{
                                 position: 'absolute',
                                 left: 0, right: 0, bottom: 0,
@@ -472,7 +469,7 @@ function FacultyGanttCard({
                                                 `${e.startTime} – ${e.endTime}`;
 
                                             if (isConflict) {
-                                                tooltipText += '\n\n⚠ CONFLICT DETECTED';
+                                                tooltipText += '\n\n CONFLICT DETECTED';
                                                 if (e.conflictsWith && e.conflictsWith.length > 0) {
                                                     e.conflictsWith.forEach(c => {
                                                         tooltipText += `\n- ${c.facultyName} (${c.subjectName}): ${c.reason}`;
@@ -504,15 +501,11 @@ function FacultyGanttCard({
                                                         padding: '0 7px',
                                                         overflow: 'hidden',
                                                         zIndex: 5 + sibIdx,
-                                                        cursor: 'pointer',
-                                                        boxShadow: isConflict ? '0 4px 12px rgba(220,38,38,0.4)' : '0 2px 6px rgba(0,0,0,0.18)',
-                                                        transition: 'all 0.15s ease',
+                                                        cursor: isConflict ? 'pointer' : 'default',
                                                         boxSizing: 'border-box',
                                                         whiteSpace: 'nowrap'
                                                     }}
                                                     onMouseEnter={(ev) => {
-                                                        ev.currentTarget.style.filter = 'brightness(1.12)';
-                                                        ev.currentTarget.style.transform = 'translateY(-1px)';
                                                         const rect = ev.currentTarget.getBoundingClientRect();
                                                         setTooltip({
                                                             text: tooltipText,
@@ -521,8 +514,6 @@ function FacultyGanttCard({
                                                         });
                                                     }}
                                                     onMouseLeave={(ev) => {
-                                                        ev.currentTarget.style.filter = '';
-                                                        ev.currentTarget.style.transform = '';
                                                         setTooltip(null);
                                                     }}
                                                     onClick={() => {
@@ -536,7 +527,7 @@ function FacultyGanttCard({
                                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                                                         lineHeight: 1.2,
                                                     }}>
-                                                        {isConflict && '⚠ '}{e.subjectCode}
+                                                        {isConflict && ' '}{e.subjectCode}
                                                     </div>
                                                     <div style={{
                                                         fontSize: 9, opacity: 0.88,

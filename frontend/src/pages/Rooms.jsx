@@ -11,12 +11,14 @@ export default function Rooms() {
     const [form, setForm] = useState({ name: '', type: 'classroom', capacity: 60, departmentId: '' });
     const [typeFilter, setTypeFilter] = useState('');
     const { toasts, addToast, removeToast } = useToast();
+    const [selectedIds, setSelectedIds] = useState([]);
 
     useEffect(() => { load(); }, []);
 
     const load = async () => {
         const [r, d] = await Promise.all([api.get('/rooms'), api.get('/departments')]);
         setRooms(r.data); setDepartments(d.data);
+        setSelectedIds([]);
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
@@ -36,6 +38,26 @@ export default function Rooms() {
         await api.delete(`/rooms/${id}`); addToast('Room deleted'); load();
     };
 
+    const handleBulkDelete = async () => {
+        if (!confirm(`Delete ${selectedIds.length} rooms?`)) return;
+        try {
+            await api.post('/rooms/bulk-delete', { ids: selectedIds });
+            addToast(`${selectedIds.length} rooms deleted`);
+            load();
+        } catch (err) {
+            addToast(err.response?.data?.error || 'Error during bulk delete', 'error');
+        }
+    };
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = (filteredItems) => {
+        if (selectedIds.length === filteredItems.length) setSelectedIds([]);
+        else setSelectedIds(filteredItems.map(r => r.id));
+    };
+
     const filtered = typeFilter ? rooms.filter(r => r.type === typeFilter) : rooms;
 
     return (
@@ -47,6 +69,9 @@ export default function Rooms() {
                     <p className="page-subtitle">Manage classrooms and laboratory spaces</p>
                 </div>
                 <div className="btn-group">
+                    {selectedIds.length > 0 && (
+                        <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
+                    )}
                     <select className="form-select" style={{ width: 140 }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
                         <option value="">All Types</option>
                         <option value="classroom">Classrooms</option>
@@ -57,10 +82,20 @@ export default function Rooms() {
             </div>
             <div className="data-table-wrapper">
                 <table className="data-table">
-                    <thead><tr><th>Name</th><th>Type</th><th>Capacity</th><th>Department</th><th>Actions</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th style={{ width: 40 }}>
+                                <input type="checkbox" checked={filtered.length > 0 && selectedIds.length === filtered.length} onChange={() => toggleSelectAll(filtered)} />
+                            </th>
+                            <th>Name</th><th>Type</th><th>Capacity</th><th>Department</th><th>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {filtered.map(r => (
-                            <tr key={r.id}>
+                            <tr key={r.id} className={selectedIds.includes(r.id) ? 'row-selected' : ''}>
+                                <td>
+                                    <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleSelect(r.id)} />
+                                </td>
                                 <td style={{ fontWeight: 600 }}>{r.name}</td>
                                 <td><span className={`badge ${r.type === 'lab' ? 'badge-lab' : 'badge-classroom'}`}>{r.type}</span></td>
                                 <td>{r.capacity}</td>
@@ -73,7 +108,7 @@ export default function Rooms() {
                                 </td>
                             </tr>
                         ))}
-                        {filtered.length === 0 && <tr><td colSpan={5} className="empty-state">No rooms found</td></tr>}
+                        {filtered.length === 0 && <tr><td colSpan={6} className="empty-state">No rooms found</td></tr>}
                     </tbody>
                 </table>
             </div>

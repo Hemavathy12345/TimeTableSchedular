@@ -209,5 +209,17 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
     }
 });
 
+// POST /api/subjects/bulk-delete
+router.post('/bulk-delete', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
+        const result = await Subject.deleteMany({ id: { $in: ids } });
+        res.json({ message: `${result.deletedCount} subjects deleted` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
 

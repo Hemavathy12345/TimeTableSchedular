@@ -31,21 +31,28 @@ export function exportClassPDF(viewData) {
     doc.setFontSize(9);
     doc.text(`Year ${classYear} | Generated: ${new Date().toLocaleDateString()}`, 250, 16);
 
-    // Build table data
-    const head = [['Time', ...days]];
+    // Build table data (Transposed: Days as rows, Times as columns)
+    const head = [['Day', ...slots.map((s, idx) => {
+        const hourNum = slots.slice(0, idx + 1).filter(xs => xs.type === 'class').length;
+        const label = s.type === 'class' ? `Hour ${hourNum}` : s.type.charAt(0).toUpperCase() + s.type.slice(1);
+        return `${label}\n${s.start}-${s.end}`;
+    })]];
     const body = [];
 
-    for (const slot of slots) {
-        const slotIdx = slots.indexOf(slot);
-        const row = [`${slot.start} - ${slot.end}`];
-
-        if (slot.type === 'break') {
-            days.forEach(() => row.push('Break'));
-        } else if (slot.type === 'lunch') {
-            days.forEach(() => row.push('Lunch'));
-        } else {
-            for (const day of days) {
-                const entry = entries.find(e => e.day === day && e.slotIndex === slotIdx);
+    for (const day of days) {
+        const row = [day];
+        for (let sIdx = 0; sIdx < slots.length; sIdx++) {
+            const slot = slots[sIdx];
+            if (slot.type === 'break') {
+                row.push('Break');
+            } else if (slot.type === 'lunch') {
+                row.push('Lunch');
+            } else {
+                const entry = entries.find(e => {
+                    const start = e.slotIndex;
+                    const dur = e.duration || 1;
+                    return e.day === day && sIdx >= start && sIdx < start + dur;
+                });
                 if (entry) {
                     let text = `${entry.subjectCode || entry.subjectName}\n${entry.facultyName}`;
                     if (entry.labFaculty2Name) text += ` + ${entry.labFaculty2Name}`;
@@ -65,21 +72,23 @@ export function exportClassPDF(viewData) {
         startY: 30,
         theme: 'grid',
         styles: {
-            fontSize: 7.5,
-            cellPadding: 3,
+            fontSize: 7,
+            cellPadding: 2,
             textColor: COLORS.text,
             lineColor: [200, 190, 220],
             lineWidth: 0.3,
+            halign: 'center',
+            valign: 'middle',
+            overflow: 'linebreak'
         },
         headStyles: {
             fillColor: COLORS.header,
             textColor: COLORS.white,
-            fontSize: 8,
-            fontStyle: 'bold',
-            halign: 'center'
+            fontSize: 7.5,
+            fontStyle: 'bold'
         },
         columnStyles: {
-            0: { cellWidth: 25, fontStyle: 'bold', fontSize: 7 }
+            0: { cellWidth: 22, fontStyle: 'bold', fillColor: [250, 250, 250] }
         },
         didParseCell: function (data) {
             if (data.section === 'body') {
@@ -87,16 +96,17 @@ export function exportClassPDF(viewData) {
                 if (text === 'Break') {
                     data.cell.styles.fillColor = [255, 247, 230];
                     data.cell.styles.textColor = [180, 130, 20];
-                    data.cell.styles.halign = 'center';
                 } else if (text === 'Lunch') {
                     data.cell.styles.fillColor = [230, 255, 240];
                     data.cell.styles.textColor = [20, 130, 60];
-                    data.cell.styles.halign = 'center';
                 } else if (text !== '-' && data.column.index > 0) {
-                    // Check if it's a lab
-                    const slotIdx = data.row.index;
-                    const day = days[data.column.index - 1];
-                    const entry = entries.find(e => e.day === day && e.slotIndex === slotIdx);
+                    const day = days[data.row.index];
+                    const slotIdx = data.column.index - 1;
+                    const entry = entries.find(e => {
+                        const start = e.slotIndex;
+                        const dur = e.duration || 1;
+                        return e.day === day && slotIdx >= start && slotIdx < start + dur;
+                    });
                     if (entry?.isLab) {
                         data.cell.styles.fillColor = [255, 235, 245];
                     } else if (entry) {
@@ -125,12 +135,27 @@ export function exportFacultyPDF(viewData) {
 
     const doc = new jsPDF({ orientation: 'landscape' });
 
-    timeSlotConfigs.forEach((config, configIdx) => {
-        // Only keep entries for THIS config's year
-        const yearEntries = entries.filter(e => Number(e.classYear) === Number(config.year));
+    // Group identical configs
+    const groupedConfigs = [];
+    timeSlotConfigs.forEach(cfg => {
+        const layoutKey = JSON.stringify({
+            days: cfg.days,
+            slots: cfg.slots.map(s => ({ start: s.start, end: s.end, type: s.type }))
+        });
+        const existing = groupedConfigs.find(g => g.layoutKey === layoutKey);
+        if (existing) {
+            if (!existing.years.includes(cfg.year)) existing.years.push(cfg.year);
+        } else {
+            groupedConfigs.push({ ...cfg, years: [cfg.year], layoutKey });
+        }
+    });
+
+    groupedConfigs.forEach((config, configIdx) => {
+        // Only keep entries for THIS group's years
+        const yearEntries = entries.filter(e => config.years.includes(Number(e.classYear)));
         
-        // Skip if no entries for this year and we have multiple configs (unless it's the only config)
-        if (yearEntries.length === 0 && timeSlotConfigs.length > 1) return;
+        // Skip if no entries for this group and we have multiple groups
+        if (yearEntries.length === 0 && groupedConfigs.length > 1) return;
 
         if (configIdx > 0) doc.addPage();
 
@@ -145,24 +170,35 @@ export function exportFacultyPDF(viewData) {
         doc.setFont('helvetica', 'bold');
         doc.text(`Faculty Timetable: ${facultyName}`, 14, 16);
         doc.setFontSize(9);
-        doc.text(`Year ${config.year} Timings | Generated: ${new Date().toLocaleDateString()}`, 230, 16);
+        const yearStr = config.years.length > 1 ? `Years ${config.years.sort((a,b)=>a-b).join(', ')}` : `Year ${config.years[0]}`;
+        doc.text(`${yearStr} Timings | Generated: ${new Date().toLocaleDateString()}`, 220, 16);
 
-        const head = [['Time', ...days]];
+        // Transposed: Days as rows, Times as columns
+        const head = [['Day', ...slots.map((s, idx) => {
+            const hourNum = slots.slice(0, idx + 1).filter(xs => xs.type === 'class').length;
+            const label = s.type === 'class' ? `Hour ${hourNum}` : s.type.charAt(0).toUpperCase() + s.type.slice(1);
+            return `${label}\n${s.start}-${s.end}`;
+        })]];
         const body = [];
 
-        for (const slot of slots) {
-            const slotIdx = slots.indexOf(slot);
-            const row = [`${slot.start} - ${slot.end}`];
-
-            if (slot.type === 'break') {
-                days.forEach(() => row.push('Break'));
-            } else if (slot.type === 'lunch') {
-                days.forEach(() => row.push('Lunch'));
-            } else {
-                for (const day of days) {
-                    const entry = yearEntries.find(e => e.day === day && e.slotIndex === slotIdx);
-                    if (entry) {
-                        let text = `${entry.subjectCode || entry.subjectName}\n${entry.className}\n${entry.roomName}`;
+        for (const day of days) {
+            const row = [day];
+            for (let sIdx = 0; sIdx < slots.length; sIdx++) {
+                const slot = slots[sIdx];
+                if (slot.type === 'break') {
+                    row.push('Break');
+                } else if (slot.type === 'lunch') {
+                    row.push('Lunch');
+                } else {
+                    const cellEntries = yearEntries.filter(e => {
+                        const start = e.slotIndex;
+                        const dur = e.duration || 1;
+                        return e.day === day && sIdx >= start && sIdx < start + dur;
+                    });
+                    if (cellEntries.length > 0) {
+                        let text = cellEntries.map(entry => 
+                            `${entry.subjectCode || entry.subjectName}\n${entry.className}\n${entry.roomName}`
+                        ).join('\n---\n');
                         row.push(text);
                     } else {
                         row.push('-');
@@ -178,21 +214,23 @@ export function exportFacultyPDF(viewData) {
             startY: 30,
             theme: 'grid',
             styles: {
-                fontSize: 7.5,
-                cellPadding: 3,
+                fontSize: 7,
+                cellPadding: 2,
                 textColor: COLORS.text,
                 lineColor: [200, 190, 220],
                 lineWidth: 0.3,
+                halign: 'center',
+                valign: 'middle',
+                overflow: 'linebreak'
             },
             headStyles: {
                 fillColor: COLORS.header,
                 textColor: COLORS.white,
-                fontSize: 8,
-                fontStyle: 'bold',
-                halign: 'center'
+                fontSize: 7.5,
+                fontStyle: 'bold'
             },
             columnStyles: {
-                0: { cellWidth: 25, fontStyle: 'bold', fontSize: 7 }
+                0: { cellWidth: 22, fontStyle: 'bold', fillColor: [250, 250, 250] }
             },
             didParseCell: function (data) {
                 if (data.section === 'body') {
@@ -200,18 +238,20 @@ export function exportFacultyPDF(viewData) {
                     if (text === 'Break') {
                         data.cell.styles.fillColor = [255, 247, 230];
                         data.cell.styles.textColor = [180, 130, 20];
-                        data.cell.styles.halign = 'center';
                     } else if (text === 'Lunch') {
                         data.cell.styles.fillColor = [230, 255, 240];
                         data.cell.styles.textColor = [20, 130, 60];
-                        data.cell.styles.halign = 'center';
                     } else if (text !== '-' && data.column.index > 0) {
-                        const slotIdx = data.row.index;
-                        const day = days[data.column.index - 1];
-                        const entry = yearEntries.find(e => e.day === day && e.slotIndex === slotIdx);
-                        if (entry?.isLab) {
+                        const day = days[data.row.index];
+                        const slotIdx = data.column.index - 1;
+                        const cellEntries = yearEntries.filter(e => {
+                            const start = e.slotIndex;
+                            const dur = e.duration || 1;
+                            return e.day === day && slotIdx >= start && slotIdx < start + dur;
+                        });
+                        if (cellEntries.some(e => e.isLab)) {
                             data.cell.styles.fillColor = [255, 235, 245];
-                        } else if (entry) {
+                        } else if (cellEntries.length > 0) {
                             data.cell.styles.fillColor = [235, 235, 255];
                         }
                     }

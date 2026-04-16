@@ -10,7 +10,7 @@ import {
     FacultySubjectMapping
 } from '../models/index.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
-import { generateTimetable, validateSwap, buildAllocationSummary } from '../engine/scheduler.js';
+import { generateTimetable, validateSwap, buildAllocationSummary, findValidSubjectsForSlot } from '../engine/scheduler.js';
 
 const router = Router();
 
@@ -228,6 +228,18 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
         // Detect ALL conflicts (Faculty double-booking and Room double-booking) using absolute clock time
         const checkOverlap = (s1, e1, s2, e2) => (s1 < e2 && e1 > s2);
         
+        const markConflict = (e1, e2, reason) => {
+            e1.isConflict = true;
+            e1.conflictReason = reason;
+            if (!e1.conflictsWith) e1.conflictsWith = [];
+            e1.conflictsWith.push({ subjectName: e2.subjectName, facultyName: e2.facultyName, reason });
+
+            e2.isConflict = true;
+            e2.conflictReason = reason;
+            if (!e2.conflictsWith) e2.conflictsWith = [];
+            e2.conflictsWith.push({ subjectName: e1.subjectName, facultyName: e1.facultyName, reason });
+        };
+
         const timeRegistry = { faculty: {}, room: {} };
         const addToRegistry = (reg, day, id, s, e, entry) => {
             if (!id || !s || !e) return;
@@ -360,11 +372,15 @@ router.put('/:id/swap', authenticateToken, requireRole('admin'), async (req, res
         const tt = await Timetable.findOne({ id: req.params.id });
         if (!tt) return res.status(404).json({ error: 'Timetable not found' });
 
-        const subjects = await Subject.find().lean();
+        const [subjects, classes, configs] = await Promise.all([
+            Subject.find().lean(),
+            Class.find().lean(),
+            TimeSlotConfig.find().lean()
+        ]);
 
         // Validate the swap
-        const validation = validateSwap(tt.entries, entryIndex1, entryIndex2, {
-            subjects
+        const validation = validateSwap(tt.entries.toObject(), entryIndex1, entryIndex2, {
+            subjects, classes, configs
         });
 
         if (!validation.valid) {
@@ -453,12 +469,6 @@ router.put('/:id/resolve/:entryIndex', authenticateToken, requireRole('admin'), 
 
         const days = config.days;
         const totalSlots = config.slots.length;
-
-        // Find the absolute first DAY and SLOT where:
-        // 1. Faculty is free
-        // 2. Room is free
-        // 3. Class is free
-        // over the entire duration.
         let found = false;
         let bestDay = null;
         let bestSlot = null;
@@ -723,6 +733,83 @@ router.get('/:id/room-view/:roomId', authenticateToken, async (req, res) => {
 });
 
 
+// GET /api/timetable/:id/valid-subjects/:classId/:day/:slotIndex
+router.get('/:id/valid-subjects/:classId/:day/:slotIndex', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id, classId, day, slotIndex } = req.params;
+        const tt = await Timetable.findOne({ id }).lean();
+        if (!tt) return res.status(404).json({ error: 'Timetable not found' });
+
+        const [subjects, faculty, rooms, mappings, classes, configs] = await Promise.all([
+            Subject.find().lean(),
+            Faculty.find().lean(),
+            Room.find().lean(),
+            FacultySubjectMapping.find().lean(),
+            Class.find().lean(),
+            TimeSlotConfig.find().lean()
+        ]);
+
+        const idx = parseInt(slotIndex);
+        const options = findValidSubjectsForSlot(tt.entries, classId, day, idx, {
+            subjects, faculty, rooms, mappings, classes, configs
+        });
+
+        res.json(options);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/timetable/:id/replace-slot
+router.put('/:id/replace-slot', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { day, slotIndex, classId, subjectId, facultyId, labFaculty2Id, roomId, isExtra } = req.body;
+
+        if (!classId || !day || slotIndex === undefined || !subjectId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const tt = await Timetable.findOne({ id });
+        if (!tt) return res.status(404).json({ error: 'Timetable not found' });
+
+        // Find existing entry if any
+        let entryIdx = tt.entries.findIndex(e => e.classId === classId && e.day === day && e.slotIndex === slotIndex);
+        
+        const subject = await Subject.findOne({ id: subjectId }).lean();
+
+        const newEntry = {
+            classId,
+            subjectId,
+            facultyId,
+            labFaculty2Id: labFaculty2Id || null,
+            roomId: roomId || null,
+            day,
+            slotIndex,
+            duration: 1, // Replacements are always 1 slot for now
+            isLab: subject?.type === 'lab',
+            subjectType: subject?.type || null,
+            isFixed: false,
+            isExtra: isExtra !== undefined ? isExtra : true,
+            isActivity: subject?.type === 'activity',
+            schedulingNote: `Manually replaced: ${subject?.name}`
+        };
+
+        if (entryIdx !== -1) {
+            // Update existing
+            tt.entries[entryIdx] = newEntry;
+        } else {
+            // Add new
+            tt.entries.push(newEntry);
+        }
+
+        await tt.save();
+        res.json({ message: 'Slot replaced successfully', entry: newEntry });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DELETE /api/timetable/:id
 router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
@@ -735,5 +822,17 @@ router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) 
 });
 
 // End of file
+
+// POST /api/timetable/bulk-delete
+router.post('/bulk-delete', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
+        const result = await Timetable.deleteMany({ id: { $in: ids } });
+        res.json({ message: `${result.deletedCount} timetables deleted` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 export default router;

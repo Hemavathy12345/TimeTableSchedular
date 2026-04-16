@@ -9,12 +9,14 @@ export default function Departments() {
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({ name: '', code: '' });
     const { toasts, addToast, removeToast } = useToast();
+    const [selectedIds, setSelectedIds] = useState([]);
 
     useEffect(() => { load(); }, []);
 
     const load = async () => {
         const res = await api.get('/departments');
         setDepartments(res.data);
+        setSelectedIds([]);
     };
 
     const openAdd = () => { setEditing(null); setForm({ name: '', code: '' }); setShowModal(true); };
@@ -43,6 +45,26 @@ export default function Departments() {
         load();
     };
 
+    const handleBulkDelete = async () => {
+        if (!confirm(`Delete ${selectedIds.length} departments?`)) return;
+        try {
+            await api.post('/departments/bulk-delete', { ids: selectedIds });
+            addToast(`${selectedIds.length} departments deleted`);
+            load();
+        } catch (err) {
+            addToast(err.response?.data?.error || 'Error during bulk delete', 'error');
+        }
+    };
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length === departments.length) setSelectedIds([]);
+        else setSelectedIds(departments.map(d => d.id));
+    };
+
     return (
         <div className="fade-in">
             <ToastContainer toasts={toasts} removeToast={removeToast} />
@@ -51,13 +73,21 @@ export default function Departments() {
                     <h1 className="page-title">Departments</h1>
                     <p className="page-subtitle">Manage academic departments</p>
                 </div>
-                <button className="btn btn-primary" onClick={openAdd}>+ Add Department</button>
+                <div className="btn-group">
+                    {selectedIds.length > 0 && (
+                        <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
+                    )}
+                    <button className="btn btn-primary" onClick={openAdd}>+ Add Department</button>
+                </div>
             </div>
 
             <div className="data-table-wrapper">
                 <table className="data-table">
                     <thead>
                         <tr>
+                            <th style={{ width: 40 }}>
+                                <input type="checkbox" checked={departments.length > 0 && selectedIds.length === departments.length} onChange={toggleSelectAll} />
+                            </th>
                             <th>Name</th>
                             <th>Code</th>
                             <th>Actions</th>
@@ -65,7 +95,10 @@ export default function Departments() {
                     </thead>
                     <tbody>
                         {departments.map(d => (
-                            <tr key={d.id}>
+                            <tr key={d.id} className={selectedIds.includes(d.id) ? 'row-selected' : ''}>
+                                <td>
+                                    <input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelect(d.id)} />
+                                </td>
                                 <td style={{ fontWeight: 600 }}>{d.name}</td>
                                 <td><span className="badge badge-theory">{d.code}</span></td>
                                 <td>
@@ -77,7 +110,7 @@ export default function Departments() {
                             </tr>
                         ))}
                         {departments.length === 0 && (
-                            <tr><td colSpan={3} className="empty-state">No departments yet</td></tr>
+                            <tr><td colSpan={4} className="empty-state">No departments yet</td></tr>
                         )}
                     </tbody>
                 </table>

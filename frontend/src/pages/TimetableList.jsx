@@ -42,7 +42,8 @@ export default function TimetableList() {
             ) : (
                 <div style={{ display: 'grid', gap: 16 }}>
                     {timetables.map(tt => (
-                        <div key={tt.id} className="card" style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        <div key={tt.id} className="card"
+                            style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                             onClick={() => navigate(`/timetable/${tt.id}`)}>
                             <div>
                                 <h3 style={{ fontSize: 16, fontWeight: 600 }}>{tt.name}</h3>

@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast, ToastContainer } from '../components/Toast';
 import { exportClassPDF, exportFacultyPDF } from '../utils/pdfExport';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function TimetableView() {
     const { id } = useParams();
@@ -24,6 +25,9 @@ export default function TimetableView() {
     const [error, setError] = useState(null);     // Added
     const [swapMode, setSwapMode] = useState(false);
     const [swapFirst, setSwapFirst] = useState(null);
+    const [replacementSlot, setReplacementSlot] = useState(null);
+    const [validSubjects, setValidSubjects] = useState([]);
+    const [replacementLoading, setReplacementLoading] = useState(false);
 
     useEffect(() => { loadBase(); }, [id]);
 
@@ -99,14 +103,57 @@ export default function TimetableView() {
     };
 
     const handleSlotClick = (entry, entryIndex) => {
-        if (!swapMode || user?.role !== 'admin') return;
-        if (entry.isFixed) { addToast('Cannot swap fixed slots', 'error'); return; }
+        if (user?.role !== 'admin') return;
 
-        if (swapFirst === null) {
-            setSwapFirst(entryIndex);
-            addToast('Select second slot to swap with');
+        if (swapMode) {
+            if (entry.isFixed) { addToast('Cannot swap fixed slots', 'error'); return; }
+            if (swapFirst === null) {
+                setSwapFirst(entryIndex);
+                addToast('Select second slot to swap with');
+            } else {
+                performSwap(swapFirst, entryIndex);
+            }
         } else {
-            performSwap(swapFirst, entryIndex);
+            // Replacement Mode (Only for extra sessions as requested)
+            if (entry.isExtra) {
+                fetchValidSubjects(entry);
+            }
+        }
+    };
+
+    const fetchValidSubjects = async (entry) => {
+        try {
+            setReplacementLoading(true);
+            setReplacementSlot(entry);
+            const res = await api.get(`/timetable/${id}/valid-subjects/${entry.classId}/${entry.day}/${entry.slotIndex}`);
+            setValidSubjects(res.data);
+            setReplacementLoading(false);
+        } catch (err) {
+            addToast('Failed to fetch valid subjects', 'error');
+            setReplacementLoading(false);
+            setReplacementSlot(null);
+        }
+    };
+
+    const performReplacement = async (option) => {
+        try {
+            const body = {
+                day: replacementSlot.day,
+                slotIndex: replacementSlot.slotIndex,
+                classId: replacementSlot.classId,
+                subjectId: option.subjectId,
+                facultyId: option.facultyId,
+                labFaculty2Id: option.labFaculty2Id,
+                roomId: option.roomId,
+                isExtra: true
+            };
+            await api.put(`/timetable/${id}/replace-slot`, body);
+            addToast('Slot replaced successfully');
+            setReplacementSlot(null);
+            await loadBase();
+            loadView();
+        } catch (err) {
+            addToast(err.response?.data?.error || 'Replacement failed', 'error');
         }
     };
 
@@ -154,44 +201,68 @@ export default function TimetableView() {
             );
         }
 
-        const configs = viewMode === 'faculty' 
-            ? (viewData.timeSlotConfigs || []) 
-            : [viewData.timeSlotConfig].filter(Boolean);
+        const rawConfigs = viewMode === 'faculty'
+            ? (viewData.timeSlotConfigs || [])
+            : (viewData.timeSlotConfig ? [viewData.timeSlotConfig] : []);
 
-        if (configs.length === 0) return <div className="empty-state"><p>No time slot configuration found</p></div>;
+        // Group configs by slot layout (days and slots) to merge years with identical schedules
+        const groupedConfigs = [];
+        rawConfigs.forEach(cfg => {
+            const layoutKey = JSON.stringify({
+                days: cfg.days,
+                slots: cfg.slots.map(s => ({ start: s.start, end: s.end, type: s.type }))
+            });
+            const existing = groupedConfigs.find(g => g.layoutKey === layoutKey);
+            if (existing) {
+                if (!existing.years.includes(cfg.year)) existing.years.push(cfg.year);
+            } else {
+                groupedConfigs.push({
+                    ...cfg,
+                    years: [cfg.year],
+                    layoutKey
+                });
+            }
+        });
+
+        if (groupedConfigs.length === 0) return <div className="empty-state"><p>No time slot configuration found</p></div>;
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
-                {configs.map((config, configIdx) => {
+                {groupedConfigs.map((config, configIdx) => {
                     const days = config.days;
                     const slots = config.slots;
-                    
-                    // Filter entries for this specific config's year
-                    const filteredEntries = viewMode === 'faculty' 
-                        ? viewData.entries.filter(e => Number(e.classYear) === Number(config.year))
+
+                    // Filter entries for this specific config's year set
+                    const filteredEntries = viewMode === 'faculty'
+                        ? viewData.entries.filter(e => config.years.includes(Number(e.classYear)))
                         : viewData.entries;
 
-                    if (viewMode === 'faculty' && filteredEntries.length === 0 && configs.length > 1) return null;
+                    if (viewMode === 'faculty' && filteredEntries.length === 0 && groupedConfigs.length > 1) return null;
 
-                    // Build lookup: day -> slotIndex -> entry
+                    // Build lookup: day -> slotIndex -> entry (Repeat entry for its entire duration)
                     const lookup = {};
                     filteredEntries.forEach((e) => {
-                        const key = `${e.day}-${e.slotIndex}`;
-                        if (!lookup[key]) lookup[key] = [];
-                        lookup[key].push({
-                            ...e, _idx: timetable.entries.findIndex(te =>
-                                te.classId === e.classId && te.subjectId === e.subjectId && te.day === e.day && te.slotIndex === e.slotIndex
-                            )
-                        });
+                        const dur = e.duration || 1;
+                        for (let d = 0; d < dur; d++) {
+                            const key = `${e.day}-${e.slotIndex + d}`;
+                            if (!lookup[key]) lookup[key] = [];
+                            lookup[key].push({
+                                ...e,
+                                isContinuation: d > 0,
+                                _idx: timetable.entries.findIndex(te =>
+                                    te.classId === e.classId && te.subjectId === e.subjectId && te.day === e.day && te.slotIndex === e.slotIndex
+                                )
+                            });
+                        }
                     });
 
                     return (
-                        <div key={config.id || configIdx} className="card" style={{ padding: '24px', marginBottom: '32px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                            {configs.length > 1 && (
+                        <div key={config.layoutKey || configIdx} className="card" style={{ padding: '24px', marginBottom: '32px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                            {(viewMode === 'faculty' || groupedConfigs.length > 1) && (
                                 <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
                                     <div style={{ width: 4, height: 24, background: '#1a73e8', borderRadius: 2 }}></div>
                                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#333' }}>
-                                        Schedule for Year {config.year} Configuration
+                                        {config.years.length > 1 ? `Years ${config.years.sort((a, b) => a - b).join(', ')}` : `Year ${config.years[0]}`}
                                     </h3>
                                     <span style={{ fontSize: 12, color: '#666', background: '#f0f0f0', padding: '2px 8px', borderRadius: 4 }}>
                                         {slots.filter(s => s.type === 'class').length} classes per day
@@ -202,137 +273,110 @@ export default function TimetableView() {
                                 <table className="timetable-table">
                                     <thead>
                                         <tr>
-                                            <th style={{ width: 80 }}>Time</th>
-                                            {days.map(day => (
-                                                <th key={day} className="timetable-day-header">{day}</th>
+                                            <th>Day</th>
+                                            {slots.map((slot, sIdx) => (
+                                                <th key={sIdx}>
+                                                    <div>
+                                                        {slot.type === 'break' ? 'Break' : slot.type === 'lunch' ? 'Lunch' : slot.type === 'activity' ? 'Activity' : `Hour ${slots.slice(0, sIdx + 1).filter(s => s.type === 'class').length}`}
+                                                    </div>
+                                                    <span className="slot-time">{slot.start} - {slot.end}</span>
+                                                </th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {slots.map((slot, slotIdx) => {
-                                            if (slot.type === 'break') {
-                                                return (
-                                                    <tr key={slotIdx}>
-                                                        <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
-                                                        {days.map(day => (
-                                                            <td key={day}><div className="timetable-slot break-slot">Break</div></td>
-                                                        ))}
-                                                    </tr>
-                                                );
-                                            }
-                                            if (slot.type === 'lunch') {
-                                                return (
-                                                    <tr key={slotIdx}>
-                                                        <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
-                                                        {days.map(day => (
-                                                            <td key={day}><div className="timetable-slot lunch-slot">Lunch</div></td>
-                                                        ))}
-                                                    </tr>
-                                                );
-                                            }
+                                        {days.map((day, dayIdx) => (
+                                            <tr key={day}>
+                                                <td>
+                                                    <div className="timetable-day-label">
+                                                        {day.toUpperCase().substring(0, 3)}
+                                                    </div>
+                                                </td>
+                                                {slots.map((slot, slotIdx) => {
+                                                    const key = `${day}-${slotIdx}`;
+                                                    const cellEntries = lookup[key] || [];
 
-                                            return (
-                                                <tr key={slotIdx}>
-                                                    <td><span className="slot-time">{slot.start}-{slot.end}</span></td>
-                                                    {days.map(day => {
-                                                        const key = `${day}-${slotIdx}`;
-                                                        const cellEntries = lookup[key] || [];
+                                                    if (slot.type === 'break') {
+                                                        return <td key={slotIdx}><div className="timetable-slot break-slot">Break</div></td>;
+                                                    }
+                                                    if (slot.type === 'lunch') {
+                                                        return <td key={slotIdx}><div className="timetable-slot lunch-slot">Lunch</div></td>;
+                                                    }
 
-                                                        let continuation = null;
-                                                        for (let offset = 1; offset <= slotIdx; offset++) {
-                                                            const earlierEntries = lookup[`${day}-${slotIdx - offset}`] || [];
-                                                            continuation = earlierEntries.find(e => e.duration > offset);
-                                                            if (continuation) break;
+                                                    if (cellEntries.length === 0) {
+                                                        if (slot.type === 'activity') {
+                                                            return <td key={slotIdx}><div className="timetable-slot activity-slot">Activity Hour</div></td>;
                                                         }
+                                                        return <td key={slotIdx}></td>;
+                                                    }
 
-                                                        if (cellEntries.length === 0 && continuation) {
-                                                            const typeClass = continuation.isLab ? 'lab' : (continuation.subjectType === 'project' ? 'project' : 'theory');
-                                                            return (
-                                                                <td key={day} style={{ verticalAlign: 'top', paddingTop: 0 }}>
-                                                                    <div className={`timetable-slot ${typeClass}`} style={{ opacity: 0.7, borderTop: 'none', borderRadius: '0 0 4px 4px', minHeight: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                        <div className="slot-subject" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                                                                            ↕ {continuation.subjectCode || 'cont.'}
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-                                                            );
-                                                        }
-
-                                                        if (cellEntries.length === 0) {
-                                                            if (slot.type === 'activity') {
-                                                                return <td key={day}><div className="timetable-slot activity-slot">Activity Hour</div></td>;
-                                                            }
-                                                            return <td key={day}></td>;
-                                                        }
-
-                                                        return (
-                                                            <td key={day}>
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                                                    {cellEntries.map((entry, eIdx) => {
-                                                                        if (entry.isActivity) {
-                                                                            return (
-                                                                                <div key={eIdx} className="timetable-slot" style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', cursor: 'default' }}
-                                                                                    title={`Fixed Activity: ${entry.activityLabel}`}>
-                                                                                    <div className="slot-subject" style={{ fontSize: 11, color: '#15803d' }}>📌 {entry.activityLabel}</div>
-                                                                                </div>
-                                                                            );
-                                                                        }
-                                                                        
-                                                                        const isConf = !!entry.isConflict;
-                                                                        const typeClass = entry.isLab ? 'lab' : (entry.subjectType === 'project' ? 'project' : 'theory');
-                                                                        const isActive = swapMode && (swapFirst === entry._idx);
-
+                                                    return (
+                                                        <td key={slotIdx}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%' }}>
+                                                                {cellEntries.map((entry, eIdx) => {
+                                                                    if (entry.isActivity) {
                                                                         return (
-                                                                            <div
-                                                                                key={eIdx}
-                                                                                className={`timetable-slot ${typeClass} ${isActive ? 'swap-highlight' : ''}`}
-                                                                                style={{
-                                                                                    cursor: swapMode ? 'pointer' : 'default',
-                                                                                    border: isConf ? '2px solid #ef4444' : (entry.isExtra ? '1px solid #f59e0b' : undefined),
-                                                                                    background: isConf ? '#fee2e2' : undefined,
-                                                                                    minHeight: cellEntries.length > 1 ? 40 : 64,
-                                                                                    padding: cellEntries.length > 1 ? '4px 8px' : '10px 12px',
-                                                                                    position: 'relative'
-                                                                                }}
-                                                                                onClick={() => handleSlotClick(entry, entry._idx)}
-                                                                                title={[
-                                                                                    isConf ? '⚠ OVERLAP DETECTED' : '',
-                                                                                    `${entry.subjectName} (${entry.subjectCode})`,
-                                                                                    `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
-                                                                                    `Room: ${entry.roomName}`,
-                                                                                    entry.isExtra ? 'Extra session (gap-fill)' : '',
-                                                                                    entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
-                                                                                ].filter(Boolean).join('\n')}
-                                                                            >
-                                                                                {isConf && (
-                                                                                    <div style={{ position: 'absolute', top: 2, right: 4, color: '#ef4444', fontSize: 9, fontWeight: 'bold' }}>
-                                                                                        ⚠ OVERLAP
-                                                                                    </div>
-                                                                                )}
-                                                                                <div className="slot-subject">
-                                                                                    {entry.subjectCode || entry.subjectName}
-                                                                                    {entry.isExtra && <span style={{ fontSize: 9, marginLeft: 3, color: '#f59e0b', fontWeight: 700 }}>+</span>}
-                                                                                </div>
-                                                                                <div className="slot-faculty">
-                                                                                    {viewMode === 'lab'
-                                                                                        ? `${entry.className} · ${entry.facultyName}`
-                                                                                        : viewMode === 'class'
-                                                                                            ? entry.facultyName
-                                                                                            : entry.className
-                                                                                    }
-                                                                                    {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
-                                                                                </div>
-                                                                                {viewMode !== 'lab' && <div className="slot-room">{entry.roomName}</div>}
+                                                                            <div key={eIdx} className="timetable-slot" style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', cursor: 'default' }}
+                                                                                title={`Fixed Activity: ${entry.activityLabel}`}>
+                                                                                <div className="slot-subject" style={{ color: '#15803d' }}>📌 {entry.activityLabel}</div>
                                                                             </div>
                                                                         );
-                                                                    })}
-                                                                </div>
-                                                            </td>
-                                                        );
-                                                    })}
-                                                </tr>
-                                            );
-                                        })}
+                                                                    }
+
+                                                                    const isConf = !!entry.isConflict;
+                                                                    const typeClass = entry.isLab ? 'lab' : (entry.subjectType === 'project' ? 'project' : 'theory');
+                                                                    const isActive = swapMode && (swapFirst === entry._idx);
+
+                                                                    return (
+                                                                        <div
+                                                                            key={eIdx}
+                                                                            className={`timetable-slot ${typeClass} ${isActive ? 'swap-highlight' : ''}`}
+                                                                            style={{
+                                                                                cursor: (swapMode && !entry.isContinuation) ? 'pointer' : 'default',
+                                                                                border: isConf ? '2px solid #ef4444' : undefined,
+                                                                                background: isConf ? '#fee2e2' : undefined,
+                                                                                opacity: entry.isContinuation ? 0.9 : 1
+                                                                            }}
+                                                                            onClick={() => {
+                                                                                if (!entry.isContinuation) handleSlotClick(entry, entry._idx);
+                                                                            }}
+                                                                            title={[
+                                                                                isConf ? ' OVERLAP DETECTED' : '',
+                                                                                `${entry.subjectName} (${entry.subjectCode})`,
+                                                                                `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
+                                                                                `Room: ${entry.roomName}`,
+                                                                                entry.isExtra ? 'Extra session (gap-fill)' : '',
+                                                                                entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
+                                                                            ].filter(Boolean).join('\n')}
+                                                                        >
+                                                                            {isConf && (
+                                                                                <div style={{ position: 'absolute', top: 4, right: 6, color: '#ef4444', fontSize: 8, fontWeight: 900 }}>
+                                                                                    ⚠ CONFLICT
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="slot-subject">
+                                                                                {entry.subjectCode || entry.subjectName}
+                                                                                {entry.isExtra && <span style={{ fontSize: 9, marginLeft: 3, color: '#f59e0b', fontWeight: 700 }}>+</span>}
+                                                                            </div>
+                                                                            <div className="slot-faculty">
+                                                                                {viewMode === 'lab'
+                                                                                    ? `${entry.className} · ${entry.facultyName}`
+                                                                                    : viewMode === 'class'
+                                                                                        ? entry.facultyName
+                                                                                        : entry.className
+                                                                                }
+                                                                                {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
+                                                                            </div>
+                                                                            {viewMode !== 'lab' && <div className="slot-room">{entry.roomName}</div>}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>
@@ -355,11 +399,15 @@ export default function TimetableView() {
                 </div>
                 <div className="btn-group">
                     {user?.role === 'admin' && (
-                        <button
-                            className={`btn ${swapMode ? 'btn-danger' : 'btn-secondary'}`}
-                            onClick={() => { setSwapMode(!swapMode); setSwapFirst(null); }}
+                        <button 
+                            className={`btn ${swapMode ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => {
+                                setSwapMode(!swapMode);
+                                setSwapFirst(null);
+                            }}
+                            title={swapMode ? "Cancel swap mode" : "Enter swap mode to move slots"}
                         >
-                            {swapMode ? '✕ Cancel Swap' : 'Swap Slots'}
+                            {swapMode ? 'Cancel Swap' : 'Swap Slots'}
                         </button>
                     )}
                     <button
@@ -391,18 +439,33 @@ export default function TimetableView() {
                     </button>
                 </div>
 
-                {(viewMode === 'class' || viewMode === 'summary' || viewMode === 'faculty' || viewMode === 'lab') && (
-                    <select className="form-select" style={{ width: 250 }} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
-                        {(viewMode === 'class' || viewMode === 'summary')
-                            ? classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-                            : viewMode === 'faculty'
-                                ? faculty.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
-                                : rooms.filter(r => r.type === 'lab').map(r => (
-                                    <option key={r.id} value={r.id}>{r.name} (Cap: {r.capacity || '—'})</option>
-                                ))
-                        }
-                    </select>
-                )}
+                {(viewMode === 'class' || viewMode === 'summary' || viewMode === 'faculty' || viewMode === 'lab') && (() => {
+                    let opts = [];
+                    let ph = "";
+                    if (viewMode === 'class' || viewMode === 'summary') {
+                        opts = classes.map(c => ({ id: c.id, name: c.name }));
+                        ph = "Search class...";
+                    } else if (viewMode === 'faculty') {
+                        opts = faculty.map(f => ({ id: f.id, name: f.name }));
+                        ph = "Search faculty...";
+                    } else if (viewMode === 'lab') {
+                        opts = rooms.filter(r => r.type === 'lab').map(r => ({
+                            id: r.id,
+                            name: `${r.name} (Cap: ${r.capacity || '—'})`
+                        }));
+                        ph = "Search lab...";
+                    }
+
+                    return (
+                        <SearchableSelect
+                            options={opts}
+                            value={selectedId}
+                            onChange={e => setSelectedId(e.target.value)}
+                            placeholder={ph}
+                            style={{ width: 280 }}
+                        />
+                    );
+                })()}
                 {viewMode === 'lab' && viewData && (
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ background: 'rgba(6,182,212,0.12)', color: 'rgba(6,182,212,1)', padding: '2px 10px', borderRadius: 999, fontWeight: 600 }}>
@@ -472,24 +535,24 @@ export default function TimetableView() {
                                                             <td>
                                                                 {row.isFullyAllocated ? (
                                                                     <span style={{ color: '#059669', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
-                                                                        <span style={{ fontSize: 16 }}>✓</span> Fully Allocated
+                                                                        <span style={{ fontSize: 16 }}></span> Fully Allocated
                                                                     </span>
                                                                 ) : row.allocatedPeriods > 0 ? (
                                                                     <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
-                                                                        <span style={{ fontSize: 16 }}>⚠</span> Partially Allocated
+                                                                        <span style={{ fontSize: 16 }}></span> Partially Allocated
                                                                     </span>
                                                                 ) : (
                                                                     <span style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
-                                                                        <span style={{ fontSize: 16 }}>✕</span> Not Allocated
+                                                                        <span style={{ fontSize: 16 }}></span> Not Allocated
                                                                     </span>
                                                                 )}
                                                             </td>
                                                             <td style={{ textAlign: 'center', fontWeight: 600 }}>{row.requiredPeriods}</td>
                                                             <td style={{ textAlign: 'center' }}>
-                                                                <span style={{ 
-                                                                    background: row.isFullyAllocated ? '#ecfdf5' : (row.allocatedPeriods > 0 ? '#fffbeb' : '#fef2f2'), 
-                                                                    color: row.isFullyAllocated ? '#065f46' : (row.allocatedPeriods > 0 ? '#92400e' : '#991b1b'), 
-                                                                    padding: '2px 10px', borderRadius: 12, fontWeight: 700, fontSize: 13 
+                                                                <span style={{
+                                                                    background: row.isFullyAllocated ? '#ecfdf5' : (row.allocatedPeriods > 0 ? '#fffbeb' : '#fef2f2'),
+                                                                    color: row.isFullyAllocated ? '#065f46' : (row.allocatedPeriods > 0 ? '#92400e' : '#991b1b'),
+                                                                    padding: '2px 10px', borderRadius: 12, fontWeight: 700, fontSize: 13
                                                                 }}>
                                                                     {row.allocatedPeriods}
                                                                 </span>
@@ -516,6 +579,74 @@ export default function TimetableView() {
             )}
 
 
+            {/* Ultra-Simple Replacement Modal */}
+            {replacementSlot && (
+                <div className="modal-overlay" onClick={() => setReplacementSlot(null)}>
+                    <div className="modal" 
+                        style={{ maxWidth: 400, padding: 0, borderRadius: 12, overflow: 'hidden', background: '#fff' }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {replacementLoading ? (
+                            <div style={{ textAlign: 'center', padding: 30 }}>
+                                <div className="spinner" style={{ margin: '0 auto 10px', width: 20, height: 20 }}></div>
+                                <p style={{ fontSize: 12, color: '#333' }}>Finding options...</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700, color: '#475569', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>SELECT REPLACEMENT</span>
+                                    <span style={{ fontWeight: 400, color: '#64748b' }}>{replacementSlot.day} · Slot {replacementSlot.slotIndex + 1}</span>
+                                </div>
+                                
+                                <div style={{ maxHeight: '50vh', overflowY: 'auto', background: '#fff' }}>
+                                    {validSubjects.length === 0 ? (
+                                        <div style={{ padding: 20, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                                            No available options
+                                        </div>
+                                    ) : (
+                                        validSubjects.map((opt, i) => (
+                                            <button 
+                                                key={i} 
+                                                style={{ 
+                                                    width: '100%',
+                                                    padding: '14px 16px',
+                                                    background: '#fff',
+                                                    border: 'none',
+                                                    borderBottom: '1px solid #f1f5f9',
+                                                    textAlign: 'left',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: 2,
+                                                    transition: 'background 0.15s'
+                                                }}
+                                                onClick={() => performReplacement(opt)}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                                    <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b' }}>{opt.subjectName}</span>
+                                                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{opt.subjectCode}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                                                    <span>{opt.facultyName}</span>
+                                                    <span style={{ fontWeight: 700, color: '#1a73e8' }}>{opt.roomName}</span>
+                                                </div>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                                <button 
+                                    style={{ padding: '12px', border: 'none', background: '#fcfcfc', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, borderTop: '1px solid #f1f5f9' }}
+                                    onClick={() => setReplacementSlot(null)}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

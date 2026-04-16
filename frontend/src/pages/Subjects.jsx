@@ -16,6 +16,7 @@ export default function Subjects() {
     const [importErrors, setImportErrors] = useState([]);
     const [importing, setImporting] = useState(false);
     const fileInputRef = useRef(null);
+    const [selectedIds, setSelectedIds] = useState([]);
     const { toasts, addToast, removeToast } = useToast();
 
     useEffect(() => { load(); }, []);
@@ -23,6 +24,7 @@ export default function Subjects() {
     const load = async () => {
         const [s, d] = await Promise.all([api.get('/subjects'), api.get('/departments')]);
         setSubjects(s.data); setDepartments(d.data);
+        setSelectedIds([]); // Clear selection on load
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
@@ -44,6 +46,26 @@ export default function Subjects() {
     const remove = async (id) => {
         if (!confirm('Delete this subject?')) return;
         await api.delete(`/subjects/${id}`); addToast('Subject deleted'); load();
+    };
+
+    const handleBulkDelete = async () => {
+        if (!confirm(`Delete ${selectedIds.length} subjects?`)) return;
+        try {
+            await api.post('/subjects/bulk-delete', { ids: selectedIds });
+            addToast(`${selectedIds.length} subjects deleted`);
+            load();
+        } catch (err) {
+            addToast(err.response?.data?.error || 'Error during bulk delete', 'error');
+        }
+    };
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = (filteredItems) => {
+        if (selectedIds.length === filteredItems.length) setSelectedIds([]);
+        else setSelectedIds(filteredItems.map(s => s.id));
     };
 
     // ── Excel Import ──────────────────────────────────────────────────────────
@@ -135,6 +157,9 @@ export default function Subjects() {
                         <option value="elective">Elective</option>
                         <option value="Non-Academic">Non-Academic</option>
                     </select>
+                    {selectedIds.length > 0 && (
+                        <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
+                    )}
                     {/* <button className="btn btn-secondary" onClick={openImport}>Import Excel</button> */}
                     <button className="btn btn-primary" onClick={openAdd}>+ Add Subject</button>
                 </div>
@@ -142,10 +167,20 @@ export default function Subjects() {
 
             <div className="data-table-wrapper">
                 <table className="data-table">
-                    <thead><tr><th>Name</th><th>Code</th><th>Type</th><th>Weekly Periods</th><th>Year</th><th>Department</th><th>Actions</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th style={{ width: 40 }}>
+                                <input type="checkbox" checked={filtered.length > 0 && selectedIds.length === filtered.length} onChange={() => toggleSelectAll(filtered)} />
+                            </th>
+                            <th>Name</th><th>Code</th><th>Type</th><th>Weekly Periods</th><th>Year</th><th>Department</th><th>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {filtered.map(s => (
-                            <tr key={s.id}>
+                            <tr key={s.id} className={selectedIds.includes(s.id) ? 'row-selected' : ''}>
+                                <td>
+                                    <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggleSelect(s.id)} />
+                                </td>
                                 <td style={{ fontWeight: 600 }}>{s.name}</td>
                                 <td>{s.code}</td>
                                 <td><span className={`badge badge-${s.type}`}>{s.type}</span></td>
@@ -160,7 +195,7 @@ export default function Subjects() {
                                 </td>
                             </tr>
                         ))}
-                        {filtered.length === 0 && <tr><td colSpan={8} className="empty-state">No subjects found</td></tr>}
+                        {filtered.length === 0 && <tr><td colSpan={9} className="empty-state">No subjects found</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -276,7 +311,7 @@ export default function Subjects() {
                 {/* Errors */}
                 {importErrors.length > 0 && (
                     <div style={{ marginTop: 12, background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: 8, padding: '10px 14px', maxHeight: 120, overflowY: 'auto' }}>
-                        <strong style={{ color: '#c53030', fontSize: 13 }}>⚠ Errors ({importErrors.length})</strong>
+                        <strong style={{ color: '#c53030', fontSize: 13 }}> Errors ({importErrors.length})</strong>
                         <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#742a2a' }}>
                             {importErrors.map((e, i) => <li key={i}>{e}</li>)}
                         </ul>

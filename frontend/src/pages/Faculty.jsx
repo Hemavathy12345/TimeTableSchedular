@@ -12,6 +12,7 @@ export default function Faculty() {
     const [form, setForm] = useState({ name: '', departmentId: '', designation: '' });
     const [filter, setFilter] = useState('');
     const { toasts, addToast, removeToast } = useToast();
+    const [selectedIds, setSelectedIds] = useState([]);
 
     useEffect(() => { load(); }, []);
 
@@ -19,6 +20,7 @@ export default function Faculty() {
         const [f, d] = await Promise.all([api.get('/faculty'), api.get('/departments')]);
         setFaculty(f.data);
         setDepartments(d.data);
+        setSelectedIds([]); // Clear selection on load
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
@@ -26,6 +28,26 @@ export default function Faculty() {
     const openEdit = (f) => { setEditing(f); setForm({ name: f.name, departmentId: f.departmentId, designation: f.designation || '' }); setShowModal(true); };
 
     const fileInputRef = useRef(null);
+
+    const handleBulkDelete = async () => {
+        if (!confirm(`Delete ${selectedIds.length} faculty members?`)) return;
+        try {
+            await api.post('/faculty/bulk-delete', { ids: selectedIds });
+            addToast(`${selectedIds.length} faculty members deleted`);
+            load();
+        } catch (err) {
+            addToast(err.response?.data?.error || 'Error during bulk delete', 'error');
+        }
+    };
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = (filteredItems) => {
+        if (selectedIds.length === filteredItems.length) setSelectedIds([]);
+        else setSelectedIds(filteredItems.map(f => f.id));
+    };
 
     const handleExcelImport = async (e) => {
         const file = e.target.files[0];
@@ -155,6 +177,9 @@ export default function Faculty() {
                     <p className="page-subtitle">Manage faculty members across departments</p>
                 </div>
                 <div className="btn-group">
+                    {selectedIds.length > 0 && (
+                        <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
+                    )}
                     <input className="filter-input" placeholder="Search faculty..." value={filter} onChange={e => setFilter(e.target.value)} />
                     <input type="file" ref={fileInputRef} onChange={handleExcelImport} accept=".xlsx,.xls" style={{ display: 'none' }} />
                     <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>Import Excel</button>
@@ -163,10 +188,20 @@ export default function Faculty() {
             </div>
             <div className="data-table-wrapper">
                 <table className="data-table">
-                    <thead><tr><th>Name</th><th>Department</th><th>Designation</th><th>Actions</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th style={{ width: 40 }}>
+                                <input type="checkbox" checked={filtered.length > 0 && selectedIds.length === filtered.length} onChange={() => toggleSelectAll(filtered)} />
+                            </th>
+                            <th>Name</th><th>Department</th><th>Designation</th><th>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {filtered.map(f => (
-                            <tr key={f.id}>
+                            <tr key={f.id} className={selectedIds.includes(f.id) ? 'row-selected' : ''}>
+                                <td>
+                                    <input type="checkbox" checked={selectedIds.includes(f.id)} onChange={() => toggleSelect(f.id)} />
+                                </td>
                                 <td style={{ fontWeight: 600 }}>{f.name}</td>
                                 <td><span className="badge badge-classroom">{deptName(f.departmentId)}</span></td>
                                 <td style={{ color: 'var(--text-secondary)' }}>{f.designation || '-'}</td>
@@ -178,7 +213,7 @@ export default function Faculty() {
                                 </td>
                             </tr>
                         ))}
-                        {filtered.length === 0 && <tr><td colSpan={4} className="empty-state">No faculty found</td></tr>}
+                        {filtered.length === 0 && <tr><td colSpan={5} className="empty-state">No faculty found</td></tr>}
                     </tbody>
                 </table>
             </div>

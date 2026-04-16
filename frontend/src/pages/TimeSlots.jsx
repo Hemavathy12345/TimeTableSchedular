@@ -3,19 +3,31 @@ import api from '../utils/api';
 import { useToast, ToastContainer } from '../components/Toast';
 
 export default function TimeSlots() {
-    const [configs, setConfigs] = useState([]);
-    const [selectedYear, setSelectedYear] = useState(1);
-    const [editingConfig, setEditingConfig] = useState(null);
-    const { toasts, addToast, removeToast } = useToast();
+    const [selectedIds, setSelectedIds] = useState([]);
 
     useEffect(() => { load(); }, []);
 
     const load = async () => {
         const res = await api.get('/timeslots');
         setConfigs(res.data);
+        setSelectedIds([]);
     };
 
+    const handleBulkDelete = async () => {
+        if (!confirm(`Delete ${selectedIds.length} year configurations? This will remove all slot timings for these years.`)) return;
+        try {
+            await api.post('/timeslots/bulk-delete', { ids: selectedIds });
+            addToast(`${selectedIds.length} configurations deleted`);
+            load();
+        } catch (err) {
+            addToast(err.response?.data?.error || 'Error during bulk delete', 'error');
+        }
+    };
 
+    const toggleSelect = (id) => {
+        if (!id) return;
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
 
     useEffect(() => {
         const config = configs.find(c => c.year === selectedYear);
@@ -96,19 +108,35 @@ export default function TimeSlots() {
                     <h1 className="page-title">Time Slot Configuration</h1>
                     <p className="page-subtitle">Configure staggered timings and working days for each year level</p>
                 </div>
-                <button className="btn btn-primary" onClick={save}>Save Configuration</button>
+                <div className="btn-group">
+                    {selectedIds.length > 0 && (
+                        <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
+                    )}
+                    <button className="btn btn-primary" onClick={save}>Save Configuration</button>
+                </div>
             </div>
 
-            <div className="view-toggle" style={{ marginBottom: 24, width: 'fit-content' }}>
-                {[1, 2, 3, 4].map(y => (
-                    <button
-                        key={y}
-                        className={`view-toggle-btn ${selectedYear === y ? 'active' : ''}`}
-                        onClick={() => setSelectedYear(y)}
-                    >
-                        Year {y}
-                    </button>
-                ))}
+            <div className="view-toggle" style={{ marginBottom: 24, width: 'fit-content', display: 'flex', gap: 12, alignItems: 'center' }}>
+                {[1, 2, 3, 4].map(y => {
+                    const configId = configs.find(c => c.year === y)?.id;
+                    return (
+                        <div key={y} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                            <button
+                                className={`view-toggle-btn ${selectedYear === y ? 'active' : ''}`}
+                                onClick={() => setSelectedYear(y)}
+                            >
+                                Year {y}
+                            </button>
+                            {configId && (
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectedIds.includes(configId)} 
+                                    onChange={() => toggleSelect(configId)} 
+                                />
+                            )}
+                        </div>
+                    );
+                })}
             </div>
 
             {editingConfig && (
