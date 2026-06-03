@@ -14,6 +14,7 @@ export default function Sidebar() {
         { path: '/subjects', label: 'Subjects', roles: ['admin'] },
         { path: '/classes', label: 'Classes', roles: ['admin'] },
         { path: '/timeslots', label: 'Time Slots', roles: ['admin'] },
+        { path: '/coe-schedule', label: 'COE Schedule', roles: ['admin'] },
         { type: 'section', label: 'Scheduling', roles: ['admin'] },
         { path: '/generate', label: 'Generate Timetable', roles: ['admin'] },
         { path: '/timetables', label: 'View Timetables', roles: ['admin', 'faculty', 'student'] },

@@ -13,6 +13,7 @@ import GenerateWizard from './pages/GenerateWizard';
 import TimetableList from './pages/TimetableList';
 import TimetableView from './pages/TimetableView';
 import FacultyOverview from './pages/FacultyOverview';
+import CoeSchedule from './pages/CoeSchedule';
 
 function AppLayout({ children }) {
     return (
@@ -40,6 +41,7 @@ function AppRoutes() {
                 <Route path="/timetables" element={<TimetableList />} />
                 <Route path="/timetable/:id" element={<TimetableView />} />
                 <Route path="/timetable/:id/faculty-overview" element={<FacultyOverview />} />
+                <Route path="/coe-schedule" element={<CoeSchedule />} />
                 <Route path="*" element={<Navigate to="/dashboard" />} />
             </Routes>
         </AppLayout>

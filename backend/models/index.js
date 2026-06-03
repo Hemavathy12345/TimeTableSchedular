@@ -7,3 +7,4 @@ export { default as Class } from './Class.js';
 export { default as TimeSlotConfig } from './TimeSlotConfig.js';
 export { default as Timetable } from './Timetable.js';
 export { default as FacultySubjectMapping } from './FacultySubjectMapping.js';
+export { default as Coe } from './Coe.js';

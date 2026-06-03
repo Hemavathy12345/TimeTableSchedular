@@ -7,10 +7,11 @@ import { useToast, ToastContainer } from '../components/Toast';
 export default function Subjects() {
     const [subjects, setSubjects] = useState([]);
     const [departments, setDepartments] = useState([]);
+    const [rooms, setRooms] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ name: '', code: '', type: 'theory', totalHours: 3, year: 1, departmentId: '', duration: 1 });
+    const [form, setForm] = useState({ name: '', code: '', type: 'theory', totalHours: 3, year: 1, departmentId: '', duration: 1, assignedLabId: '' });
     const [filters, setFilters] = useState({ dept: '', year: '', type: '' });
     const [importData, setImportData] = useState([]);
     const [importErrors, setImportErrors] = useState([]);
@@ -22,14 +23,14 @@ export default function Subjects() {
     useEffect(() => { load(); }, []);
 
     const load = async () => {
-        const [s, d] = await Promise.all([api.get('/subjects'), api.get('/departments')]);
-        setSubjects(s.data); setDepartments(d.data);
+        const [s, d, r] = await Promise.all([api.get('/subjects'), api.get('/departments'), api.get('/rooms')]);
+        setSubjects(s.data); setDepartments(d.data); setRooms(r.data);
         setSelectedIds([]); // Clear selection on load
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
-    const openAdd = () => { setEditing(null); setForm({ name: '', code: '', type: 'theory', totalHours: 3, year: 1, departmentId: departments[0]?.id || '', duration: 1 }); setShowModal(true); };
-    const openEdit = (s) => { setEditing(s); setForm({ name: s.name, code: s.code, type: s.type, totalHours: s.totalHours, year: s.year, departmentId: s.departmentId, duration: s.duration }); setShowModal(true); };
+    const openAdd = () => { setEditing(null); setForm({ name: '', code: '', type: 'theory', totalHours: 3, year: 1, departmentId: departments[0]?.id || '', duration: 1, assignedLabId: '' }); setShowModal(true); };
+    const openEdit = (s) => { setEditing(s); setForm({ name: s.name, code: s.code, type: s.type, totalHours: s.totalHours, year: s.year, departmentId: s.departmentId, duration: s.duration, assignedLabId: s.assignedLabId || '' }); setShowModal(true); };
 
     const save = async () => {
         try {
@@ -172,7 +173,7 @@ export default function Subjects() {
                             <th style={{ width: 40 }}>
                                 <input type="checkbox" checked={filtered.length > 0 && selectedIds.length === filtered.length} onChange={() => toggleSelectAll(filtered)} />
                             </th>
-                            <th>Name</th><th>Code</th><th>Type</th><th>Weekly Periods</th><th>Year</th><th>Department</th><th>Actions</th>
+                            <th>Name</th><th>Code</th><th>Type</th><th>Weekly Periods</th><th>Year</th><th>Department</th><th>Assigned Lab</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -187,6 +188,7 @@ export default function Subjects() {
                                 <td>{Math.ceil((s.totalHours || s.weeklyFrequency || 1) / 15)} hrs/wk</td>
                                 <td>Year {s.year}</td>
                                 <td>{deptName(s.departmentId)}</td>
+                                <td>{s.type === 'lab' ? (rooms.find(r => r.id === s.assignedLabId)?.name || 'Not Assigned') : '-'}</td>
                                 <td>
                                     <div className="table-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>Edit</button>
@@ -195,7 +197,7 @@ export default function Subjects() {
                                 </td>
                             </tr>
                         ))}
-                        {filtered.length === 0 && <tr><td colSpan={9} className="empty-state">No subjects found</td></tr>}
+                        {filtered.length === 0 && <tr><td colSpan={10} className="empty-state">No subjects found</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -246,6 +248,19 @@ export default function Subjects() {
                         </select>
                     </div>
                 </div>
+                {form.type === 'lab' && (
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">Assigned Lab Room</label>
+                            <select className="form-select" value={form.assignedLabId} onChange={e => setForm({ ...form, assignedLabId: e.target.value })}>
+                                <option value="">Not Assigned</option>
+                                {rooms.filter(r => r.type === 'lab').map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                )}
             </Modal>
 
             {/* Import Excel Modal */}

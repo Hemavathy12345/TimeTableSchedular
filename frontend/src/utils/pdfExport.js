@@ -56,6 +56,7 @@ export function exportClassPDF(viewData) {
                 if (entry) {
                     let text = `${entry.subjectCode || entry.subjectName}\n${entry.facultyName}`;
                     if (entry.labFaculty2Name) text += ` + ${entry.labFaculty2Name}`;
+                    if (entry.labFaculty3Name) text += ` + ${entry.labFaculty3Name}`;
                     text += `\n${entry.roomName}`;
                     row.push(text);
                 } else {

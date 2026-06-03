@@ -5,7 +5,8 @@ const facultySubjectMappingSchema = new mongoose.Schema({
     facultyId: { type: String, required: true },
     subjectId: { type: String, required: true },
     classId: { type: String, required: true },
-    labFaculty2Id: { type: String, default: null }
+    labFaculty2Id: { type: String, default: null },
+    labFaculty3Id: { type: String, default: null }
 }, { timestamps: true });
 
 export default mongoose.model('FacultySubjectMapping', facultySubjectMappingSchema);

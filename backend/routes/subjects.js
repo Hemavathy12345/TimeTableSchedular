@@ -35,7 +35,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
 const deriveSubjectDefaults = (type, totalHours, duration) => {
     const hours = parseInt(totalHours) || 15;
     // Default duration by type: lab/project = 2 consecutive, theory/elective/non-academic = 1
-    const defaultDuration = (type === 'lab' || type === 'project') ? 2 : 1;
+    // Exception: Non-Academic subjects with 2 periods per week (30 total hours) default to 2
+    let defaultDuration = (type === 'lab' || type === 'project') ? 2 : 1;
+    if (type === 'Non-Academic' && Math.ceil(hours / 15) === 2) {
+        defaultDuration = 2;
+    }
     const dur = parseInt(duration) || defaultDuration;
     return { totalHours: hours, duration: dur };
 };
@@ -43,7 +47,7 @@ const deriveSubjectDefaults = (type, totalHours, duration) => {
 // POST /api/subjects
 router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
-        const { name, code, type, totalHours, year, departmentId, duration } = req.body;
+        const { name, code, type, totalHours, year, departmentId, duration, assignedLabId } = req.body;
         if (!name || !code || !type) return res.status(400).json({ error: 'Name, code, and type required' });
         const derived = deriveSubjectDefaults(type, totalHours, duration);
         const sub = await Subject.create({
@@ -52,7 +56,8 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
             totalHours: derived.totalHours,
             year: year || 1,
             departmentId: departmentId || null,
-            duration: derived.duration
+            duration: derived.duration,
+            assignedLabId: assignedLabId || null
         });
         res.status(201).json(sub.toObject());
     } catch (err) {

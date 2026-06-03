@@ -9,6 +9,7 @@ import subjectRoutes from './routes/subjects.js';
 import classRoutes from './routes/classes.js';
 import timeslotRoutes from './routes/timeslots.js';
 import timetableRoutes from './routes/timetable.js';
+import coeRoutes from './routes/coe.js';
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -26,6 +27,7 @@ app.use('/api/subjects', subjectRoutes);
 app.use('/api/classes', classRoutes);
 app.use('/api/timeslots', timeslotRoutes);
 app.use('/api/timetable', timetableRoutes);
+app.use('/api/coe', coeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

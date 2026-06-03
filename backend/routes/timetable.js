@@ -7,7 +7,8 @@ import {
     Faculty,
     Room,
     TimeSlotConfig,
-    FacultySubjectMapping
+    FacultySubjectMapping,
+    Coe
 } from '../models/index.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
 import { generateTimetable, validateSwap, buildAllocationSummary, findValidSubjectsForSlot } from '../engine/scheduler.js';
@@ -27,7 +28,8 @@ router.get('/mappings/all', authenticateToken, async (req, res) => {
             facultyName: faculty.find(f => f.id === m.facultyId)?.name || '',
             subjectName: subjects.find(s => s.id === m.subjectId)?.name || '',
             className: classes.find(c => c.id === m.classId)?.name || '',
-            labFaculty2Name: m.labFaculty2Id ? faculty.find(f => f.id === m.labFaculty2Id)?.name || '' : ''
+            labFaculty2Name: m.labFaculty2Id ? faculty.find(f => f.id === m.labFaculty2Id)?.name || '' : '',
+            labFaculty3Name: m.labFaculty3Id ? faculty.find(f => f.id === m.labFaculty3Id)?.name || '' : ''
         }));
         res.json(enriched);
     } catch (err) {
@@ -38,7 +40,7 @@ router.get('/mappings/all', authenticateToken, async (req, res) => {
 // POST /api/timetable/mappings
 router.post('/mappings', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
-        const { facultyId, subjectId, classId, labFaculty2Id } = req.body;
+        const { facultyId, subjectId, classId, labFaculty2Id, labFaculty3Id } = req.body;
         if (!facultyId || !subjectId || !classId) {
             return res.status(400).json({ error: 'facultyId, subjectId, and classId required' });
         }
@@ -46,7 +48,8 @@ router.post('/mappings', authenticateToken, requireRole('admin'), async (req, re
         const mapping = await FacultySubjectMapping.create({
             id: `fsm-${uuidv4().slice(0, 8)}`,
             facultyId, subjectId, classId,
-            labFaculty2Id: labFaculty2Id || null
+            labFaculty2Id: labFaculty2Id || null,
+            labFaculty3Id: labFaculty3Id || null
         });
         res.status(201).json(mapping.toObject());
     } catch (err) {
@@ -58,7 +61,7 @@ router.post('/mappings', authenticateToken, requireRole('admin'), async (req, re
 router.put('/mappings/class/:classId', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
         const classId = req.params.classId;
-        const { mappings } = req.body; // Array of { subjectId, facultyId, labFaculty2Id }
+        const { mappings } = req.body; // Array of { subjectId, facultyId, labFaculty2Id, labFaculty3Id }
 
         if (!Array.isArray(mappings)) {
             return res.status(400).json({ error: 'Mappings array required' });
@@ -82,7 +85,8 @@ router.put('/mappings/class/:classId', authenticateToken, requireRole('admin'), 
             classId: classId,
             subjectId: m.subjectId,
             facultyId: m.facultyId,
-            labFaculty2Id: m.labFaculty2Id || null
+            labFaculty2Id: m.labFaculty2Id || null,
+            labFaculty3Id: m.labFaculty3Id || null
         }));
 
         // 4. Bulk insert
@@ -205,6 +209,7 @@ router.get('/:id/faculty-overview', authenticateToken, async (req, res) => {
                 roomName: rooms.find(r => r.id === e.roomId)?.name || '',
                 facultyName: faculty.find(f => f.id === e.facultyId)?.name || '',
                 labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : '',
+                labFaculty3Name: e.labFaculty3Id ? faculty.find(f => f.id === e.labFaculty3Id)?.name || '' : '',
                 startTime: startSlot?.start || '',
                 endTime: endSlot?.end || ''
             };
@@ -324,6 +329,9 @@ router.post('/generate', authenticateToken, requireRole('admin'), async (req, re
         const rooms = await Room.find().lean();
         const timeSlotConfigs = await TimeSlotConfig.find().lean();
 
+        // Load all COE entries — the scheduler matches them to classes by year
+        const coeEntries = await Coe.find().lean();
+
         // Use selected classes or all classes
         const classes = selectedClassIds && selectedClassIds.length > 0
             ? allClasses.filter(c => selectedClassIds.includes(c.id))
@@ -341,7 +349,8 @@ router.post('/generate', authenticateToken, requireRole('admin'), async (req, re
             rooms,
             timeSlotConfigs,
             defaultClasses: [], // Not yet implemented in models/seed
-            facultySubjectMapping: mappings
+            facultySubjectMapping: mappings,
+            coeEntries
         };
 
         const result = generateTimetable(data);
@@ -433,6 +442,7 @@ router.get('/:id/class-view/:classId', authenticateToken, async (req, res) => {
             subjectCode: subjects.find(s => s.id === e.subjectId)?.code || '',
             facultyName: faculty.find(f => f.id === e.facultyId)?.name || '',
             labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : '',
+            labFaculty3Name: e.labFaculty3Id ? faculty.find(f => f.id === e.labFaculty3Id)?.name || '' : '',
             roomName: rooms.find(r => r.id === e.roomId)?.name || ''
         }));
 
@@ -643,7 +653,8 @@ router.get('/:id/faculty-view/:facultyId', authenticateToken, async (req, res) =
                 classYear: cls?.year || '',
                 roomName: rooms.find(r => r.id === e.roomId)?.name || '',
                 facultyName: faculty.find(f => f.id === e.facultyId)?.name || '',
-                labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : ''
+                labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : '',
+                labFaculty3Name: e.labFaculty3Id ? faculty.find(f => f.id === e.labFaculty3Id)?.name || '' : ''
             };
         });
 
@@ -706,6 +717,7 @@ router.get('/:id/room-view/:roomId', authenticateToken, async (req, res) => {
                 facultyName:     faculty.find(f => f.id === e.facultyId)?.name || '',
                 roomName:        roomObj?.name || '',
                 labFaculty2Name: e.labFaculty2Id ? faculty.find(f => f.id === e.labFaculty2Id)?.name || '' : '',
+                labFaculty3Name: e.labFaculty3Id ? faculty.find(f => f.id === e.labFaculty3Id)?.name || '' : '',
                 startTime:       startSlot?.start || '',
                 endTime:         endSlot?.end || ''
             };
@@ -721,11 +733,12 @@ router.get('/:id/room-view/:roomId', authenticateToken, async (req, res) => {
         const displayConfig = roomConfigs[0] || configs[0] || null;
 
         res.json({
-            roomName:       room.name,
-            roomType:       room.type,
-            roomCapacity:   room.capacity || '',
-            timeSlotConfig: displayConfig,
-            entries:        enriched
+            roomName:        room.name,
+            roomType:        room.type,
+            roomCapacity:    room.capacity || '',
+            timeSlotConfig:  roomConfigs[0] || configs[0] || null, // kept for backward compat
+            timeSlotConfigs: roomConfigs.length > 0 ? roomConfigs : (configs[0] ? [configs[0]] : []),
+            entries:         enriched
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

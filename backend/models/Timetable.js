@@ -5,6 +5,7 @@ const timetableEntrySchema = new mongoose.Schema({
     subjectId: { type: String, default: null },
     facultyId: { type: String, default: null },
     labFaculty2Id: { type: String, default: null },
+    labFaculty3Id: { type: String, default: null },
     roomId: { type: String, default: null },
     day: String,
     slotIndex: Number,
@@ -13,6 +14,8 @@ const timetableEntrySchema = new mongoose.Schema({
     isFixed: { type: Boolean, default: false },
     isExtra: { type: Boolean, default: false },
     isActivity: { type: Boolean, default: false },
+    isCOE: { type: Boolean, default: false },
+    coeLabel: { type: String, default: null },
     activityLabel: { type: String, default: null },
     schedulingNote: { type: String, default: null }
 }, { _id: false });

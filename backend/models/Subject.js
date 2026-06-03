@@ -8,7 +8,8 @@ const subjectSchema = new mongoose.Schema({
     totalHours: { type: Number, default: 1 },
     year: { type: Number, default: 1 },
     departmentId: { type: String, default: null },
-    duration: { type: Number, default: 1 }
+    duration: { type: Number, default: 1 },
+    assignedLabId: { type: String, default: null }
 }, { timestamps: true });
 
 export default mongoose.model('Subject', subjectSchema);

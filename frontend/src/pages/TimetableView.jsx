@@ -192,7 +192,7 @@ export default function TimetableView() {
         if (viewMode === 'lab' && (!viewData.entries || viewData.entries.length === 0)) {
             return (
                 <div className="empty-state" style={{ background: 'rgba(6,182,212,0.02)', border: '2px dashed rgba(6,182,212,0.1)', borderRadius: 12 }}>
-                    <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
+                    <div style={{ fontSize: 32, marginBottom: 12 }}></div>
                     <h3>No lab sessions scheduled</h3>
                     <p style={{ maxWidth: 350, margin: '8px auto', fontSize: 13, color: 'var(--text-secondary)' }}>
                         This lab room is currently free or only contains theory classes which are filtered out of this view.
@@ -201,8 +201,8 @@ export default function TimetableView() {
             );
         }
 
-        const rawConfigs = viewMode === 'faculty'
-            ? (viewData.timeSlotConfigs || [])
+        const rawConfigs = (viewMode === 'faculty' || viewMode === 'lab')
+            ? (viewData.timeSlotConfigs || (viewData.timeSlotConfig ? [viewData.timeSlotConfig] : []))
             : (viewData.timeSlotConfig ? [viewData.timeSlotConfig] : []);
 
         // Group configs by slot layout (days and slots) to merge years with identical schedules
@@ -233,11 +233,11 @@ export default function TimetableView() {
                     const slots = config.slots;
 
                     // Filter entries for this specific config's year set
-                    const filteredEntries = viewMode === 'faculty'
+                    const filteredEntries = (viewMode === 'faculty' || viewMode === 'lab')
                         ? viewData.entries.filter(e => config.years.includes(Number(e.classYear)))
                         : viewData.entries;
 
-                    if (viewMode === 'faculty' && filteredEntries.length === 0 && groupedConfigs.length > 1) return null;
+                    if ((viewMode === 'faculty' || viewMode === 'lab') && filteredEntries.length === 0 && groupedConfigs.length > 1) return null;
 
                     // Build lookup: day -> slotIndex -> entry (Repeat entry for its entire duration)
                     const lookup = {};
@@ -258,7 +258,7 @@ export default function TimetableView() {
 
                     return (
                         <div key={config.layoutKey || configIdx} className="card" style={{ padding: '24px', marginBottom: '32px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                            {(viewMode === 'faculty' || groupedConfigs.length > 1) && (
+                            {(viewMode === 'faculty' || viewMode === 'lab' || groupedConfigs.length > 1) && (
                                 <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
                                     <div style={{ width: 4, height: 24, background: '#1a73e8', borderRadius: 2 }}></div>
                                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#333' }}>
@@ -314,6 +314,22 @@ export default function TimetableView() {
                                                         <td key={slotIdx}>
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%' }}>
                                                                 {cellEntries.map((entry, eIdx) => {
+                                                                    if (entry.isCOE) {
+                                                                        return (
+                                                                            <div key={eIdx} className="timetable-slot" style={{
+                                                                                background: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
+                                                                                border: '2px solid #a78bfa',
+                                                                                cursor: 'default',
+                                                                                position: 'relative'
+                                                                            }}
+                                                                                title={`COE Block (Hard Constraint): ${entry.coeLabel}`}>
+                                                                                <div className="slot-subject" style={{ color: '#5b21b6', fontWeight: 700, fontSize: 11 }}>
+                                                                                    {entry.coeLabel || 'COE'}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    }
+
                                                                     if (entry.isActivity) {
                                                                         return (
                                                                             <div key={eIdx} className="timetable-slot" style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', border: '1px solid #86efac', cursor: 'default' }}
@@ -341,9 +357,9 @@ export default function TimetableView() {
                                                                                 if (!entry.isContinuation) handleSlotClick(entry, entry._idx);
                                                                             }}
                                                                             title={[
-                                                                                isConf ? ' OVERLAP DETECTED' : '',
+                                                                                isConf ? '⚠ OVERLAP DETECTED' : '',
                                                                                 `${entry.subjectName} (${entry.subjectCode})`,
-                                                                                `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}`,
+                                                                                `Faculty: ${entry.facultyName}${entry.labFaculty2Name ? ' + ' + entry.labFaculty2Name : ''}${entry.labFaculty3Name ? ' + ' + entry.labFaculty3Name : ''}`,
                                                                                 `Room: ${entry.roomName}`,
                                                                                 entry.isExtra ? 'Extra session (gap-fill)' : '',
                                                                                 entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
@@ -366,6 +382,7 @@ export default function TimetableView() {
                                                                                         : entry.className
                                                                                 }
                                                                                 {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
+                                                                                {entry.labFaculty3Name && ` + ${entry.labFaculty3Name}`}
                                                                             </div>
                                                                             {viewMode !== 'lab' && <div className="slot-room">{entry.roomName}</div>}
                                                                         </div>
