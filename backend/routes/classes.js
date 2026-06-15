@@ -32,7 +32,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // POST /api/classes
 router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
-    const { name, year, section, departmentId, defaultRoomId, advisorId } = req.body;
+    const { name, year, section, departmentId, defaultRoomId, advisorId, tutor1Id, tutor2Id } = req.body;
         if (!name || !year || !section) return res.status(400).json({ error: 'Name, year, and section required' });
 
         const cls = await Class.create({
@@ -40,7 +40,9 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
             name, year, section,
             departmentId: departmentId || null,
             defaultRoomId: defaultRoomId || null,
-            advisorId: advisorId || null
+            advisorId: advisorId || null,
+            tutor1Id: tutor1Id || null,
+            tutor2Id: tutor2Id || null
         });
         res.status(201).json(cls.toObject());
     } catch (err) {

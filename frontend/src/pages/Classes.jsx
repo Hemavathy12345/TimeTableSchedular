@@ -10,7 +10,7 @@ export default function Classes() {
     const [faculty, setFaculty] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ name: '', year: 1, section: 'A', departmentId: '', defaultRoomId: '', advisorId: '' });
+    const [form, setForm] = useState({ name: '', year: 1, section: 'A', departmentId: '', defaultRoomId: '', advisorId: '', tutor1Id: '', tutor2Id: '' });
     const { toasts, addToast, removeToast } = useToast();
     const [selectedIds, setSelectedIds] = useState([]);
 
@@ -31,7 +31,9 @@ export default function Classes() {
             name: '', year: 1, section: 'A',
             departmentId: departments[0]?.id || '',
             defaultRoomId: '',
-            advisorId: ''
+            advisorId: '',
+            tutor1Id: '',
+            tutor2Id: ''
         });
         setShowModal(true);
     };
@@ -41,7 +43,9 @@ export default function Classes() {
             name: c.name, year: c.year, section: c.section,
             departmentId: c.departmentId,
             defaultRoomId: c.defaultRoomId || '',
-            advisorId: c.advisorId || ''
+            advisorId: c.advisorId || '',
+            tutor1Id: c.tutor1Id || '',
+            tutor2Id: c.tutor2Id || ''
         });
         setShowModal(true);
     };
@@ -101,7 +105,7 @@ export default function Classes() {
                             <th style={{ width: 40 }}>
                                 <input type="checkbox" checked={classes.length > 0 && selectedIds.length === classes.length} onChange={toggleSelectAll} />
                             </th>
-                            <th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Default Room</th><th>Class Advisor</th><th>Actions</th>
+                            <th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Default Room</th><th>Class Advisor</th><th>Tutor 1</th><th>Tutor 2</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -116,6 +120,8 @@ export default function Classes() {
                                 <td>{deptName(c.departmentId)}</td>
                                 <td><span className="badge badge-classroom">{roomName(c.defaultRoomId)}</span></td>
                                 <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{advisorName(c.advisorId)}</td>
+                                <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{advisorName(c.tutor1Id)}</td>
+                                <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{advisorName(c.tutor2Id)}</td>
                                 <td>
                                     <div className="table-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
@@ -169,6 +175,26 @@ export default function Classes() {
                             <option key={f.id} value={f.id}>{f.name}</option>
                         ))}
                     </select>
+                </div>
+                <div className="form-row">
+                    <div className="form-group">
+                        <label className="form-label">Tutor 1 (Optional)</label>
+                        <select className="form-select" value={form.tutor1Id} onChange={e => setForm({ ...form, tutor1Id: e.target.value })}>
+                            <option value="">None</option>
+                            {faculty.map(f => (
+                                <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Tutor 2 (Optional)</label>
+                        <select className="form-select" value={form.tutor2Id} onChange={e => setForm({ ...form, tutor2Id: e.target.value })}>
+                            <option value="">None</option>
+                            {faculty.map(f => (
+                                <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </Modal>
         </div>

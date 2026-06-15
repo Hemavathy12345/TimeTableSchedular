@@ -263,3 +263,125 @@ export function exportFacultyPDF(viewData) {
 
     doc.save(`${facultyName.replace(/\s+/g, '_')}_Timetable.pdf`);
 }
+
+export function exportLabPDF(viewData) {
+    const { roomName, roomType, roomCapacity, timeSlotConfigs, entries } = viewData;
+    if (!timeSlotConfigs || timeSlotConfigs.length === 0) return;
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+
+    // Group identical configs
+    const groupedConfigs = [];
+    timeSlotConfigs.forEach(cfg => {
+        const layoutKey = JSON.stringify({
+            days: cfg.days,
+            slots: cfg.slots.map(s => ({ start: s.start, end: s.end, type: s.type }))
+        });
+        const existing = groupedConfigs.find(g => g.layoutKey === layoutKey);
+        if (existing) {
+            if (!existing.years.includes(cfg.year)) existing.years.push(cfg.year);
+        } else {
+            groupedConfigs.push({ ...cfg, years: [cfg.year], layoutKey });
+        }
+    });
+
+    groupedConfigs.forEach((config, configIdx) => {
+        const yearEntries = entries.filter(e => config.years.includes(Number(e.classYear)));
+        if (yearEntries.length === 0 && groupedConfigs.length > 1) return;
+
+        if (configIdx > 0) doc.addPage();
+
+        const days = config.days;
+        const slots = config.slots;
+
+        // Title Section
+        doc.setFillColor(...COLORS.primary);
+        doc.rect(0, 0, 297, 25, 'F');
+        doc.setTextColor(...COLORS.white);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Lab Timetable: ${roomName}`, 14, 16);
+        doc.setFontSize(9);
+        const yearStr = config.years.length > 1 ? `Years ${config.years.sort((a,b)=>a-b).join(', ')}` : `Year ${config.years[0]}`;
+        const capStr = roomCapacity ? ` | Capacity: ${roomCapacity}` : '';
+        doc.text(`${roomType}${capStr} | ${yearStr} Timings | Generated: ${new Date().toLocaleDateString()}`, 180, 16);
+
+        const head = [['Day', ...slots.map((s, idx) => {
+            const hourNum = slots.slice(0, idx + 1).filter(xs => xs.type === 'class').length;
+            const label = s.type === 'class' ? `Hour ${hourNum}` : s.type.charAt(0).toUpperCase() + s.type.slice(1);
+            return `${label}\n${s.start}-${s.end}`;
+        })]];
+        const body = [];
+
+        for (const day of days) {
+            const row = [day];
+            for (let sIdx = 0; sIdx < slots.length; sIdx++) {
+                const slot = slots[sIdx];
+                if (slot.type === 'break') {
+                    row.push('Break');
+                } else if (slot.type === 'lunch') {
+                    row.push('Lunch');
+                } else {
+                    const cellEntries = yearEntries.filter(e => {
+                        const start = e.slotIndex;
+                        const dur = e.duration || 1;
+                        return e.day === day && sIdx >= start && sIdx < start + dur;
+                    });
+                    if (cellEntries.length > 0) {
+                        let text = cellEntries.map(entry => {
+                            let line = `${entry.subjectCode || entry.subjectName}\n${entry.className}\n${entry.facultyName}`;
+                            if (entry.labFaculty2Name) line += `\n+ ${entry.labFaculty2Name}`;
+                            return line;
+                        }).join('\n---\n');
+                        row.push(text);
+                    } else {
+                        row.push('-');
+                    }
+                }
+            }
+            body.push(row);
+        }
+
+        doc.autoTable({
+            head,
+            body,
+            startY: 30,
+            theme: 'grid',
+            styles: {
+                fontSize: 7,
+                cellPadding: 2,
+                textColor: COLORS.text,
+                lineColor: [200, 190, 220],
+                lineWidth: 0.3,
+                halign: 'center',
+                valign: 'middle',
+                overflow: 'linebreak'
+            },
+            headStyles: {
+                fillColor: COLORS.header,
+                textColor: COLORS.white,
+                fontSize: 7.5,
+                fontStyle: 'bold'
+            },
+            columnStyles: {
+                0: { cellWidth: 22, fontStyle: 'bold', fillColor: [250, 250, 250] }
+            },
+            didParseCell: function (data) {
+                if (data.section === 'body') {
+                    const text = data.cell.raw;
+                    if (text === 'Break') {
+                        data.cell.styles.fillColor = [255, 247, 230];
+                        data.cell.styles.textColor = [180, 130, 20];
+                    } else if (text === 'Lunch') {
+                        data.cell.styles.fillColor = [230, 255, 240];
+                        data.cell.styles.textColor = [20, 130, 60];
+                    } else if (text !== '-' && data.column.index > 0) {
+                        data.cell.styles.fillColor = [255, 235, 245]; // Lab colors
+                    }
+                }
+            }
+        });
+    });
+
+    doc.save(`${roomName.replace(/\s+/g, '_')}_Lab_Timetable.pdf`);
+}

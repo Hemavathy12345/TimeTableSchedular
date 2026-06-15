@@ -142,7 +142,8 @@ export default function GenerateWizard() {
             initialMappings[mapping.classId][mapping.subjectId] = {
                 facultyId: mapping.facultyId,
                 labFaculty2Id: mapping.labFaculty2Id || '',
-                labFaculty3Id: mapping.labFaculty3Id || ''
+                labFaculty3Id: mapping.labFaculty3Id || '',
+                assignedLabId: mapping.assignedLabId || ''
             };
         });
 
@@ -162,7 +163,8 @@ export default function GenerateWizard() {
                         initialMappings[cls.id][sub.id] = {
                             facultyId: cls.advisorId,
                             labFaculty2Id: '',
-                            labFaculty3Id: ''
+                            labFaculty3Id: '',
+                            assignedLabId: ''
                         };
                     }
                 }
@@ -198,14 +200,19 @@ export default function GenerateWizard() {
         });
     };
 
-    const handleLabChange = async (subjectId, labId) => {
-        try {
-            await api.put(`/subjects/${subjectId}`, { assignedLabId: labId || null });
-            setSubjects(prev => prev.map(s => s.id === subjectId ? { ...s, assignedLabId: labId || null } : s));
-            addToast('Lab assignment updated successfully', 'success');
-        } catch (err) {
-            addToast(err.response?.data?.error || 'Failed to update lab assignment', 'error');
-        }
+    const handleLabChange = (classId, subjectId, labId) => {
+        // Update per-section lab assignment in local state only; saved with class mappings
+        setClassMappings(prev => {
+            const currentClassMap = prev[classId] || {};
+            const currentSubMap = currentClassMap[subjectId] || { facultyId: '', labFaculty2Id: '', labFaculty3Id: '', assignedLabId: '' };
+            return {
+                ...prev,
+                [classId]: {
+                    ...currentClassMap,
+                    [subjectId]: { ...currentSubMap, assignedLabId: labId || '' }
+                }
+            };
+        });
     };
 
     const saveClassMappings = async (classId) => {
@@ -218,7 +225,8 @@ export default function GenerateWizard() {
                     subjectId,
                     facultyId: fields.facultyId || null,
                     labFaculty2Id: fields.labFaculty2Id || null,
-                    labFaculty3Id: fields.labFaculty3Id || null
+                    labFaculty3Id: fields.labFaculty3Id || null,
+                    assignedLabId: fields.assignedLabId || null
                 }))
                 .filter(m => m.facultyId);
 
@@ -241,6 +249,7 @@ export default function GenerateWizard() {
                             facultyId: mapping.facultyId,
                             labFaculty2Id: mapping.labFaculty2Id || '',
                             labFaculty3Id: mapping.labFaculty3Id || '',
+                            assignedLabId: mapping.assignedLabId || '',
                             // preserve existing tempDeptId from current state
                             tempDeptId: prev[classId]?.[mapping.subjectId]?.tempDeptId
                         };
@@ -439,14 +448,15 @@ export default function GenerateWizard() {
                                                                             <select
                                                                                 className="form-select"
                                                                                 style={{ fontSize: 10, padding: '2px 8px', height: 26, border: '1px solid #cbd5e1', borderRadius: 4 }}
-                                                                                value={sub.assignedLabId || ''}
-                                                                                onChange={e => handleLabChange(sub.id, e.target.value)}
+                                                                                value={mappingData.assignedLabId || ''}
+                                                                                onChange={e => handleLabChange(activeClassId, sub.id, e.target.value)}
                                                                             >
                                                                                 <option value="">Select Lab...</option>
                                                                                 {rooms.filter(r => r.type === 'lab').map(r => (
                                                                                     <option key={r.id} value={r.id}>{r.name}</option>
                                                                                 ))}
                                                                             </select>
+                                                                            <span style={{ fontSize: 9, color: '#7c3aed', fontStyle: 'italic' }}>this section only</span>
                                                                         </div>
                                                                     )}
                                                                 </div>

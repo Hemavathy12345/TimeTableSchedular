@@ -44,6 +44,76 @@ async function run() {
     console.log(`\nIntel Lab utilization: ${intelEntries.length} blocks allocated`);
     console.log(`FullStack Lab utilization: ${fullstackEntries.length} blocks allocated`);
 
+    // Verify if any Non-Academic subject is scheduled in slot 1
+    const configByYear = {};
+    for (const cfg of timeSlotConfigs) configByYear[Number(cfg.year)] = cfg;
+    const getSlotConfig = (year) => configByYear[Number(year)] || timeSlotConfigs[0] || null;
+    const getClassSlots = (year) => {
+        const cfg = getSlotConfig(year);
+        if (!cfg) return [];
+        const slots = cfg.slots.toObject ? cfg.slots.toObject() : cfg.slots;
+        return slots.map((s, i) => ({ ...s, index: i })).filter(s => s.type === 'class');
+    };
+
+    let nonAcademicInSlot1Count = 0;
+    const violations = [];
+
+    for (const entry of res.entries) {
+        const sub = subjects.find(s => s.id === entry.subjectId);
+        if (!sub) continue;
+
+        if (sub.type === 'Non-Academic') {
+            const cls = allClasses.find(c => c.id === entry.classId);
+            const classSlots = getClassSlots(cls.year);
+            const firstClassSlotIndex = classSlots.length > 0 ? Math.min(...classSlots.map(s => s.index)) : -1;
+
+            if (entry.slotIndex === firstClassSlotIndex) {
+                nonAcademicInSlot1Count++;
+                violations.push({
+                    className: cls.name,
+                    subjectName: sub.name,
+                    day: entry.day,
+                    slotIndex: entry.slotIndex
+                });
+            }
+        }
+    }
+
+    console.log(`\nNon-Academic in slot 1 violations: ${nonAcademicInSlot1Count}`);
+    if (violations.length > 0) {
+        for (const v of violations) {
+            console.log(`  Violation: Class ${v.className}, Subject ${v.subjectName} scheduled on ${v.day} at slot ${v.slotIndex}`);
+        }
+    } else {
+        console.log(`  Success: No Non-Academic subjects placed in slot 1!`);
+    }
+
+    // Check Saturday allocations
+    let satLabs = 0;
+    let satProjects = 0;
+    let satTheory = 0;
+    
+    for (const entry of res.entries) {
+        if (entry.day === 'Saturday') {
+            const sub = subjects.find(s => s.id === entry.subjectId);
+            if (!sub) continue;
+            if (sub.type === 'lab') {
+                console.log(`  DEBUG Sat Lab: Class: ${entry.classId}, Subject: ${sub.name}, Slot: ${entry.slotIndex}`);
+                satLabs++;
+            }
+            else if (sub.type === 'project') {
+                console.log(`  DEBUG Sat Project: Class: ${entry.classId}, Subject: ${sub.name}, Slot: ${entry.slotIndex}`);
+                satProjects++;
+            }
+            else if (['theory', 'elective', 'Non-Academic', 'activity'].includes(sub.type)) satTheory++;
+        }
+    }
+
+    console.log(`\nSaturday Allocation Statistics:`);
+    console.log(`  Labs on Saturday: ${satLabs}`);
+    console.log(`  Projects on Saturday: ${satProjects}`);
+    console.log(`  Theory/Other on Saturday: ${satTheory}`);
+
     await mongoose.disconnect();
 }
 

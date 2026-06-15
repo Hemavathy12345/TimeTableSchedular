@@ -19,23 +19,30 @@ const COE = {
 export default function CoeSchedule() {
     const [coeEntries, setCoeEntries] = useState([]);
     const [configs, setConfigs]       = useState([]);
+    const [faculties, setFaculties]   = useState([]);
+    const [sections, setSections]     = useState([]);
     const [showModal, setShowModal]   = useState(false);
     const [editing, setEditing]       = useState(null);
     const [filterYear, setFilterYear] = useState('');
     const { toasts, addToast, removeToast } = useToast();
 
-    const defaultForm = { year: 1, label: 'COE', day: 'Monday', startSlotIndex: 0, endSlotIndex: 0 };
+    const defaultForm = { year: 1, label: 'COE', day: 'Monday', startSlotIndex: 0, endSlotIndex: 0, coFacultyId: '', section: 'All' };
     const [form, setForm] = useState(defaultForm);
 
     useEffect(() => { load(); }, []);
 
     const load = async () => {
-        const [coe, cfg] = await Promise.all([
+        const [coe, cfg, fac, cls] = await Promise.all([
             api.get('/coe'),
-            api.get('/timeslots')
+            api.get('/timeslots'),
+            api.get('/faculty'),
+            api.get('/classes')
         ]);
         setCoeEntries(coe.data);
         setConfigs(cfg.data);
+        setFaculties(fac.data);
+        const uniqueSects = [...new Set(cls.data.map(c => c.section).filter(Boolean))].sort();
+        setSections(uniqueSects);
     };
 
     const getSlotsForYear = (year) => {
@@ -64,7 +71,9 @@ export default function CoeSchedule() {
             label:          entry.label || 'COE',
             day:            entry.day,
             startSlotIndex: entry.startSlotIndex,
-            endSlotIndex:   entry.endSlotIndex
+            endSlotIndex:   entry.endSlotIndex,
+            coFacultyId:    entry.coFacultyId || '',
+            section:        entry.section || 'All'
         });
         setShowModal(true);
     };
@@ -80,7 +89,9 @@ export default function CoeSchedule() {
                 label:          form.label || 'COE',
                 day:            form.day,
                 startSlotIndex: Number(form.startSlotIndex),
-                endSlotIndex:   Number(form.endSlotIndex)
+                endSlotIndex:   Number(form.endSlotIndex),
+                coFacultyId:    form.coFacultyId || null,
+                section:        form.section || 'All'
             };
             if (editing) {
                 await api.put(`/coe/${editing.id}`, payload);
@@ -151,10 +162,12 @@ export default function CoeSchedule() {
                     <thead>
                         <tr>
                             <th>Year</th>
+                            <th>Section</th>
                             <th>Label</th>
                             <th>Day</th>
                             <th>Start Slot</th>
                             <th>End Slot</th>
+                            <th>Co-Faculty</th>
                             <th>Duration</th>
                             <th>Actions</th>
                         </tr>
@@ -173,6 +186,19 @@ export default function CoeSchedule() {
                                         fontWeight: 700
                                     }}>
                                         Year {entry.year}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span style={{
+                                        background: entry.section && entry.section !== 'All' ? '#ecfdf5' : '#f3f4f6',
+                                        color: entry.section && entry.section !== 'All' ? '#047857' : '#4b5563',
+                                        border: entry.section && entry.section !== 'All' ? '1px solid #a7f3d0' : '1px solid #e5e7eb',
+                                        borderRadius: 6,
+                                        padding: '3px 10px',
+                                        fontSize: 12,
+                                        fontWeight: 700
+                                    }}>
+                                        {entry.section || 'All'}
                                     </span>
                                 </td>
                                 <td>
@@ -196,6 +222,9 @@ export default function CoeSchedule() {
                                     {getSlotLabel(entry.year, entry.endSlotIndex)}
                                 </td>
                                 <td>
+                                    {faculties.find(f => f.id === entry.coFacultyId)?.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                </td>
+                                <td>
                                     <span className="badge" style={{
                                         background: '#f0f9ff',
                                         color: '#0369a1',
@@ -214,7 +243,7 @@ export default function CoeSchedule() {
                         ))}
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={7} className="empty-state">
+                                <td colSpan={9} className="empty-state">
                                     {filterYear
                                         ? `No COE blocks defined for Year ${filterYear}.`
                                         : 'No COE blocks defined yet. Click "+ Add COE Block" to create one.'}
@@ -257,7 +286,14 @@ export default function CoeSchedule() {
                                         }}>
                                             <span style={{ fontWeight: 700, color: COE.text }}></span>
                                             <div style={{ flex: 1 }}>
-                                                <div style={{ fontWeight: 600, color: COE.text }}>{e.label}</div>
+                                                <div style={{ fontWeight: 600, color: COE.text }}>
+                                                    {e.label} {e.section && e.section !== 'All' ? `(Sec ${e.section})` : '(All Sections)'}
+                                                </div>
+                                                {e.coFacultyId && (
+                                                    <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 2 }}>
+                                                        Co-Faculty: {faculties.find(f => f.id === e.coFacultyId)?.name || e.coFacultyId}
+                                                    </div>
+                                                )}
                                                 <div style={{ color: COE.textLight, fontSize: 12 }}>
                                                     {e.day} · Slots {e.startSlotIndex + 1}–{e.endSlotIndex + 1} · {durationLabel(e)}
                                                 </div>
@@ -310,8 +346,23 @@ export default function CoeSchedule() {
                             </button>
                         ))}
                     </div>
+                </div>
+
+                {/* Section selection */}
+                <div className="form-group">
+                    <label className="form-label">Section <span style={{ color: 'var(--error)' }}>*</span></label>
+                    <select
+                        className="form-select"
+                        value={form.section}
+                        onChange={e => setForm({ ...form, section: e.target.value })}
+                    >
+                        <option value="All">All Sections</option>
+                        {sections.map(s => (
+                            <option key={s} value={s}>Section {s}</option>
+                        ))}
+                    </select>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                        This COE block will apply to all classes of the selected year
+                        Choose whether this block applies to all sections or a specific class section of this year
                     </span>
                 </div>
 
@@ -339,6 +390,24 @@ export default function CoeSchedule() {
                     >
                         {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
+                </div>
+
+                {/* Co-Faculty (Optional) */}
+                <div className="form-group">
+                    <label className="form-label">Co-Faculty <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                    <select
+                        className="form-select"
+                        value={form.coFacultyId}
+                        onChange={e => setForm({ ...form, coFacultyId: e.target.value })}
+                    >
+                        <option value="">— None —</option>
+                        {faculties.map(f => (
+                            <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
+                        ))}
+                    </select>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        This faculty will be blocked from other subjects during this COE slot
+                    </span>
                 </div>
 
                 {/* Slot range */}

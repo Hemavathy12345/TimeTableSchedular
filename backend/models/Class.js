@@ -7,7 +7,9 @@ const classSchema = new mongoose.Schema({
     section: { type: String, required: true },
     departmentId: { type: String, default: null },
     defaultRoomId: { type: String, default: null },
-    advisorId: { type: String, default: null }
+    advisorId: { type: String, default: null },
+    tutor1Id: { type: String, default: null },
+    tutor2Id: { type: String, default: null }
 }, { timestamps: true });
 
 export default mongoose.model('Class', classSchema);

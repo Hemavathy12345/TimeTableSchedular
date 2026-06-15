@@ -40,7 +40,7 @@ router.get('/mappings/all', authenticateToken, async (req, res) => {
 // POST /api/timetable/mappings
 router.post('/mappings', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
-        const { facultyId, subjectId, classId, labFaculty2Id, labFaculty3Id } = req.body;
+        const { facultyId, subjectId, classId, labFaculty2Id, labFaculty3Id, assignedLabId } = req.body;
         if (!facultyId || !subjectId || !classId) {
             return res.status(400).json({ error: 'facultyId, subjectId, and classId required' });
         }
@@ -49,7 +49,8 @@ router.post('/mappings', authenticateToken, requireRole('admin'), async (req, re
             id: `fsm-${uuidv4().slice(0, 8)}`,
             facultyId, subjectId, classId,
             labFaculty2Id: labFaculty2Id || null,
-            labFaculty3Id: labFaculty3Id || null
+            labFaculty3Id: labFaculty3Id || null,
+            assignedLabId: assignedLabId || null
         });
         res.status(201).json(mapping.toObject());
     } catch (err) {
@@ -61,7 +62,7 @@ router.post('/mappings', authenticateToken, requireRole('admin'), async (req, re
 router.put('/mappings/class/:classId', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
         const classId = req.params.classId;
-        const { mappings } = req.body; // Array of { subjectId, facultyId, labFaculty2Id, labFaculty3Id }
+        const { mappings } = req.body; // Array of { subjectId, facultyId, labFaculty2Id, labFaculty3Id, assignedLabId }
 
         if (!Array.isArray(mappings)) {
             return res.status(400).json({ error: 'Mappings array required' });
@@ -86,7 +87,8 @@ router.put('/mappings/class/:classId', authenticateToken, requireRole('admin'), 
             subjectId: m.subjectId,
             facultyId: m.facultyId,
             labFaculty2Id: m.labFaculty2Id || null,
-            labFaculty3Id: m.labFaculty3Id || null
+            labFaculty3Id: m.labFaculty3Id || null,
+            assignedLabId: m.assignedLabId || null  // per-section lab room override
         }));
 
         // 4. Bulk insert
@@ -381,15 +383,17 @@ router.put('/:id/swap', authenticateToken, requireRole('admin'), async (req, res
         const tt = await Timetable.findOne({ id: req.params.id });
         if (!tt) return res.status(404).json({ error: 'Timetable not found' });
 
-        const [subjects, classes, configs] = await Promise.all([
+        const [subjects, classes, configs, rooms, facultySubjectMapping] = await Promise.all([
             Subject.find().lean(),
             Class.find().lean(),
-            TimeSlotConfig.find().lean()
+            TimeSlotConfig.find().lean(),
+            Room.find().lean(),
+            FacultySubjectMapping.find().lean()
         ]);
 
         // Validate the swap
         const validation = validateSwap(tt.entries.toObject(), entryIndex1, entryIndex2, {
-            subjects, classes, configs
+            subjects, classes, configs, rooms, facultySubjectMapping
         });
 
         if (!validation.valid) {
@@ -399,19 +403,59 @@ router.put('/:id/swap', authenticateToken, requireRole('admin'), async (req, res
         // Perform the swap
         const e1 = tt.entries[entryIndex1];
         const e2 = tt.entries[entryIndex2];
+        const d1 = e1.duration || 1;
 
-        const tempDay = e1.day;
-        const tempSlot = e1.slotIndex;
-        const tempRoom = e1.roomId;
+        const classId1 = e1.classId;
+        const classId2 = e2.classId;
 
-        // Mongoose requires setting indices this way or using .set()
-        tt.entries[entryIndex1].day = e2.day;
-        tt.entries[entryIndex1].slotIndex = e2.slotIndex;
-        tt.entries[entryIndex1].roomId = e2.roomId;
+        // identify all entries in Win1 and Win2 (same as validateSwap)
+        const entriesInWin1 = tt.entries.filter(e => 
+            e.classId === classId1 && e.day === e1.day &&
+            e.slotIndex < e1.slotIndex + d1 && e.slotIndex + (e.duration || 1) > e1.slotIndex
+        );
+        const entriesInWin2 = tt.entries.filter(e => 
+            e.classId === classId2 && e.day === e2.day &&
+            e.slotIndex < e2.slotIndex + d1 && e.slotIndex + (e.duration || 1) > e2.slotIndex
+        );
 
-        tt.entries[entryIndex2].day = tempDay;
-        tt.entries[entryIndex2].slotIndex = tempSlot;
-        tt.entries[entryIndex2].roomId = tempRoom;
+        const e1Day = e1.day;
+        const e1Slot = e1.slotIndex;
+        const e2Day = e2.day;
+        const e2Slot = e2.slotIndex;
+
+        // Identify indices first to avoid race conditions
+        const indicesInWin1 = [];
+        tt.entries.forEach((e, idx) => {
+            if (e.classId === classId1 && e.day === e1Day &&
+                e.slotIndex < e1Slot + d1 && e.slotIndex + (e.duration || 1) > e1Slot) {
+                indicesInWin1.push(idx);
+            }
+        });
+
+        const indicesInWin2 = [];
+        tt.entries.forEach((e, idx) => {
+            if (e.classId === classId2 && e.day === e2Day &&
+                e.slotIndex < e2Slot + d1 && e.slotIndex + (e.duration || 1) > e2Slot) {
+                indicesInWin2.push(idx);
+            }
+        });
+        
+        // Use a temporary clone for calculations if needed, but since we have indices:
+        const finalUpdates = [];
+        indicesInWin1.forEach(idx => {
+            const e = tt.entries[idx];
+            finalUpdates.push({ idx, day: e2Day, slot: e.slotIndex - e1Slot + e2Slot });
+        });
+        indicesInWin2.forEach(idx => {
+            const e = tt.entries[idx];
+            finalUpdates.push({ idx, day: e1Day, slot: e.slotIndex - e2Slot + e1Slot });
+        });
+
+        // Apply all updates
+        finalUpdates.forEach(u => {
+            tt.entries[u.idx].day = u.day;
+            tt.entries[u.idx].slotIndex = u.slot;
+        });
 
         await tt.save();
 
@@ -527,15 +571,21 @@ router.put('/:id/resolve/:entryIndex', authenticateToken, requireRole('admin'), 
             // SECONDARY SEARCH: Try to find a 'Resolving Swap'
             // We search for another session 'B' such that swapping target and B resolves target's conflict
             // AND doesn't create a new conflict for B.
-            const subjects = await Subject.find().lean();
-            const faculty = await Faculty.find().lean();
-            const rooms = await Room.find().lean();
+            const [subjects, classes, configs, rooms, facultySubjectMapping] = await Promise.all([
+                Subject.find().lean(),
+                Class.find().lean(),
+                TimeSlotConfig.find().lean(),
+                Room.find().lean(),
+                FacultySubjectMapping.find().lean()
+            ]);
 
             for (let i = 0; i < tt.entries.length; i++) {
                 if (i === idx) continue;
                 
                 // Use the existing validateSwap engine logic
-                const validation = validateSwap(tt.entries, idx, i, { subjects, faculty, rooms });
+                const validation = validateSwap(tt.entries, idx, i, {
+                    subjects, classes, configs, rooms, facultySubjectMapping
+                });
                 
                 if (validation.valid) {
                     const other = tt.entries[i];

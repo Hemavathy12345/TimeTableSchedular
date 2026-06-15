@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast, ToastContainer } from '../components/Toast';
-import { exportClassPDF, exportFacultyPDF } from '../utils/pdfExport';
+import { exportClassPDF, exportFacultyPDF, exportLabPDF } from '../utils/pdfExport';
 import SearchableSelect from '../components/SearchableSelect';
 
 export default function TimetableView() {
@@ -28,6 +28,7 @@ export default function TimetableView() {
     const [replacementSlot, setReplacementSlot] = useState(null);
     const [validSubjects, setValidSubjects] = useState([]);
     const [replacementLoading, setReplacementLoading] = useState(false);
+    const [hoveredSlot, setHoveredSlot] = useState(null); // { day, slotIndex }
 
     useEffect(() => { loadBase(); }, [id]);
 
@@ -166,7 +167,10 @@ export default function TimetableView() {
             await loadBase();
             loadView();
         } catch (err) {
-            addToast(err.response?.data?.error || 'Swap failed', 'error');
+            const errorMsg = err.response?.data?.error || 'Swap failed';
+            const violations = err.response?.data?.violations;
+            const detail = (violations && violations.length > 0) ? `: ${violations.slice(0, 2).join('; ')}${violations.length > 2 ? '...' : ''}` : '';
+            addToast(errorMsg + detail, 'error');
             setSwapFirst(null);
         }
     };
@@ -175,8 +179,10 @@ export default function TimetableView() {
         if (!viewData) return;
         if (viewMode === 'class') {
             exportClassPDF(viewData);
-        } else {
+        } else if (viewMode === 'faculty') {
             exportFacultyPDF(viewData);
+        } else if (viewMode === 'lab') {
+            exportLabPDF(viewData);
         }
         addToast('PDF exported!');
     };
@@ -315,6 +321,11 @@ export default function TimetableView() {
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%' }}>
                                                                 {cellEntries.map((entry, eIdx) => {
                                                                     if (entry.isCOE) {
+                                                                        const tooltip = [
+                                                                            `COE Block (Hard Constraint): ${entry.coeLabel}`,
+                                                                            entry.facultyName ? `Co-Faculty: ${entry.facultyName}` : '',
+                                                                            entry.schedulingNote ? `Note: ${entry.schedulingNote}` : ''
+                                                                        ].filter(Boolean).join('\n');
                                                                         return (
                                                                             <div key={eIdx} className="timetable-slot" style={{
                                                                                 background: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
@@ -322,10 +333,15 @@ export default function TimetableView() {
                                                                                 cursor: 'default',
                                                                                 position: 'relative'
                                                                             }}
-                                                                                title={`COE Block (Hard Constraint): ${entry.coeLabel}`}>
+                                                                                title={tooltip}>
                                                                                 <div className="slot-subject" style={{ color: '#5b21b6', fontWeight: 700, fontSize: 11 }}>
                                                                                     {entry.coeLabel || 'COE'}
                                                                                 </div>
+                                                                                {entry.facultyName && (
+                                                                                    <div className="slot-faculty" style={{ color: '#6d28d9', fontSize: 9, opacity: 0.9 }}>
+                                                                                        👤 {entry.facultyName}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         );
                                                                     }
@@ -341,7 +357,18 @@ export default function TimetableView() {
 
                                                                     const isConf = !!entry.isConflict;
                                                                     const typeClass = entry.isLab ? 'lab' : (entry.subjectType === 'project' ? 'project' : 'theory');
-                                                                    const isActive = swapMode && (swapFirst === entry._idx);
+                                                                    
+                                                                    // Highlight if it's the first selected slot
+                                                                    let isActive = swapMode && (swapFirst === entry._idx);
+                                                                    
+                                                                    // OR highlight if it's in the potential target window based on hover
+                                                                    if (swapMode && swapFirst !== null && hoveredSlot && hoveredSlot.day === day) {
+                                                                        const firstEntry = timetable.entries[swapFirst];
+                                                                        const d1 = firstEntry.duration || 1;
+                                                                        if (slotIdx >= hoveredSlot.slotIndex && slotIdx < hoveredSlot.slotIndex + d1) {
+                                                                            isActive = true;
+                                                                        }
+                                                                    }
 
                                                                     return (
                                                                         <div
@@ -349,9 +376,15 @@ export default function TimetableView() {
                                                                             className={`timetable-slot ${typeClass} ${isActive ? 'swap-highlight' : ''}`}
                                                                             style={{
                                                                                 cursor: (swapMode && !entry.isContinuation) ? 'pointer' : 'default',
-                                                                                border: isConf ? '2px solid #ef4444' : undefined,
-                                                                                background: isConf ? '#fee2e2' : undefined,
+                                                                                border: isConf ? '2px solid #ef4444' : (isActive ? '2px dashed var(--primary-color)' : undefined),
+                                                                                background: isConf ? '#fee2e2' : (isActive ? 'rgba(26, 115, 232, 0.1)' : undefined),
                                                                                 opacity: entry.isContinuation ? 0.9 : 1
+                                                                            }}
+                                                                            onMouseEnter={() => {
+                                                                                if (swapMode && swapFirst !== null) setHoveredSlot({ day, slotIndex: slotIdx });
+                                                                            }}
+                                                                            onMouseLeave={() => {
+                                                                                if (swapMode) setHoveredSlot(null);
                                                                             }}
                                                                             onClick={() => {
                                                                                 if (!entry.isContinuation) handleSlotClick(entry, entry._idx);
@@ -378,8 +411,8 @@ export default function TimetableView() {
                                                                                 {viewMode === 'lab'
                                                                                     ? `${entry.className} · ${entry.facultyName}`
                                                                                     : viewMode === 'class'
-                                                                                        ? entry.facultyName
-                                                                                        : entry.className
+                                                                                         ? entry.facultyName
+                                                                                         : entry.className
                                                                                 }
                                                                                 {entry.labFaculty2Name && ` + ${entry.labFaculty2Name}`}
                                                                                 {entry.labFaculty3Name && ` + ${entry.labFaculty3Name}`}
