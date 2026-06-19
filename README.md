@@ -1,4 +1,4 @@
-# Timetable Schedular & Manager
+# Timetable Scheduler & Manager
 
 An Automated College Timetable Management System built to streamline academic scheduling. The application handles complex constraints, allows staggered year-wise slot configurations, supports drag/click swapping with real-time collision checking, and implements multi-role control (Admin vs. Department Users).
 
@@ -13,6 +13,64 @@ The project is split into a client-server architecture:
   - Staggered slots, constraint checking, and multi-department separation.
 - **Frontend**: React, Vite, Vanilla CSS.
   - Component-driven UI with sleek animations, interactive timetable grid, drag-and-drop/click swap workflows, and searchable elements.
+
+---
+
+## 📊 Database Relationship Model (ERD)
+
+The following Mermaid diagram outlines the entity relationships within the MongoDB database:
+
+```mermaid
+erDiagram
+    DEPARTMENT ||--o{ CLASS : "owns"
+    DEPARTMENT ||--o{ FACULTY : "employs"
+    DEPARTMENT ||--o{ SUBJECT : "offers"
+    DEPARTMENT ||--o{ TIMETABLE : "generates"
+    
+    CLASS ||--o| ROOM : "has default classroom"
+    CLASS ||--o| FACULTY : "has advisor"
+    CLASS ||--o{ TIMETABLE_ENTRY : "schedules"
+    
+    SUBJECT ||--o| ROOM : "pre-assigns lab"
+    
+    FACULTY_SUBJECT_MAPPING }|--|| FACULTY : "assigns"
+    FACULTY_SUBJECT_MAPPING }|--|| SUBJECT : "requires"
+    FACULTY_SUBJECT_MAPPING }|--|| CLASS : "attaches to"
+    
+    TIMETABLE ||--o{ TIMETABLE_ENTRY : "contains"
+```
+
+---
+
+## 🔄 System Scheduling Workflow
+
+The process from configuration to final timetable publishing involves several distinct stages:
+
+```mermaid
+flowchart TD
+    A[Configure Staggered Slots per Year] --> B[Assign Faculty & Rooms to Subjects]
+    B --> C[Select Target Classes for Generation]
+    C --> D[Run Genetic/Greedy Solver]
+    D --> E{Constraints Valid?}
+    E -- No --> F[Identify Conflicts & Log Alerts]
+    F --> G[Manual Period Drag/Click Swap]
+    G --> H[Re-validate Conflicts via Backend Engine]
+    H --> E
+    E -- Yes --> I[Lock & Publish Timetable]
+```
+
+---
+
+## 🧮 Advanced Scheduling Logic & Constraints Engine
+
+At the core of this system is the scheduling algorithm located in [scheduler.js](backend/engine/scheduler.js). It differs from typical block-grid schedulers by supporting **staggered time slot schedules**—different classes and semesters can have custom start and end period offsets.
+
+### Core Constraint Rules
+1. **Time-Based Collision Checking**: Rather than matching static grid slot indices, the engine converts time strings to absolute minutes (`timeStrMins(hh:mm)`) and performs intersection checks (`checkTimeOverlap`). This ensures that staggered year-wise lunch breaks or shifted class timings do not result in double-booking of shared faculty or laboratories.
+2. **Faculty Consecutive Limit Rules**: A single faculty member cannot be scheduled to teach different subjects back-to-back within a defined threshold gap (e.g., `< 40 mins`), reducing fatigue. However, consecutive sessions of the *same* subject (e.g., a 2-hour practical Lab session) are permitted.
+3. **Room Availability Verification**: Rooms (especially specialized Labs) are reserved globally across all departments. The engine checks overlap arrays across classes to prevent two classes from accessing the same Lab simultaneously.
+4. **Subject Type Allocation Priorities**: Schedulers solve requirements sequentially based on a strict priority model:
+   $$\text{Lab Practical (1)} \rightarrow \text{Projects (2)} \rightarrow \text{Theory / Electives (3)} \rightarrow \text{Non-Academic Activities (4)}$$
 
 ---
 
@@ -34,6 +92,9 @@ The project is split into a client-server architecture:
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v18+ recommended)
 - [MongoDB](https://www.mongodb.com/try/download/community) (running locally or a MongoDB Atlas URI)
+
+> [!IMPORTANT]
+> Ensure MongoDB is running on your environment before launching the backend, as it is required to seed default departments, administrators, and default settings.
 
 ---
 
@@ -99,7 +160,8 @@ Upon starting, the backend will auto-seed:
      npm run build
      ```
 
-*Note: The frontend API base URL is configured in [api.js](frontend/src/utils/api.js) and defaults to `http://localhost:5050/api`.*
+> [!TIP]
+> The frontend API base URL is configured in [api.js](frontend/src/utils/api.js) and defaults to `http://localhost:5050/api`. If you deploy the backend on a different port, update the `baseURL` inside this file.
 
 ---
 
