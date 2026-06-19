@@ -127,17 +127,6 @@ At the core of this system is the scheduling algorithm located in [scheduler.js]
      npm start
      ```
 
-Upon starting, the backend will auto-seed:
-- Default Departments (`CSE`, `ECE`, `Placement`, `Maths`, `CSE-CYS`)
-- Default Admin account:
-  - **Username**: `admin`
-  - **Password**: `admin123`
-- Default Department User accounts:
-  - **Username**: `<department_code_lowercase>_admin` (e.g., `cse_admin`, `ece_admin`)
-  - **Password**: `dept123`
-
----
-
 ### 2. Frontend Setup
 
 1. Navigate to the `frontend` directory:
