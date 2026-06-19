@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useToast, ToastContainer } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 
 const STEPS = [
     { label: 'Basic Info' },
@@ -14,8 +15,6 @@ const STEPS = [
 function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
-    const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
-    const containerRef = { current: null };
     const triggerRef = { current: null };
 
     // Handle click outside to close
@@ -28,20 +27,15 @@ function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
         return () => document.removeEventListener('mousedown', close);
     }, [isOpen]);
 
-    const filtered = options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()));
+    const filtered = options.filter(o => {
+        const q = search.toLowerCase();
+        return o.name.toLowerCase().includes(q) || (o.subtitle && o.subtitle.toLowerCase().includes(q));
+    });
     const selected = options.find(o => o.id === value);
 
     const handleToggle = (e) => {
         if (disabled) return;
-        if (!isOpen) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            setDropdownPos({
-                top: rect.bottom + window.scrollY + 4,
-                left: rect.left + window.scrollX,
-                width: rect.width,
-            });
-        }
-        setIsOpen(!isOpen);
+        setIsOpen(prev => !prev);
     };
 
     const handleSelect = (id) => {
@@ -53,12 +47,21 @@ function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
     return (
         <div style={{ position: 'relative', width: '100%' }} ref={el => triggerRef.current = el}>
             <div className={`searchable-select-display ${disabled ? 'disabled' : ''}`}
-                style={{ opacity: disabled ? 0.6 : 1, cursor: disabled ? 'not-allowed' : 'pointer', width: '100%' }}
+                style={{ opacity: disabled ? 0.6 : 1, cursor: disabled ? 'not-allowed' : 'pointer', width: '100%', minHeight: 36, alignItems: 'center' }}
                 onClick={handleToggle}>
-                <span style={{ color: selected ? 'inherit' : '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
-                    {selected ? selected.name : placeholder}
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.2, overflow: 'hidden' }}>
+                    {selected ? (
+                        <>
+                            <span style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.name}</span>
+                            {selected.subtitle && (
+                                <span style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 400 }}>{selected.subtitle}</span>
+                            )}
+                        </>
+                    ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{placeholder}</span>
+                    )}
                 </span>
-                <span style={{ fontSize: 10, color: '#aaa' }}>{isOpen ? '▲' : '▼'}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
             </div>
 
             {isOpen && (
@@ -67,27 +70,37 @@ function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
                     top: '100%',
                     left: 0,
                     width: '100%',
-                    background: '#fff',
-                    border: '1px solid #ddd',
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border-color)',
                     borderRadius: 4,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    boxShadow: 'var(--shadow-sm)',
                     zIndex: 99999,
-                    maxHeight: 280,
+                    maxHeight: 300,
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
                     marginTop: 4
                 }}>
                     <div className="searchable-select-search">
-                        <input autoFocus placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} onClick={e => e.stopPropagation()} />
+                        <input autoFocus placeholder="Search name or dept..." value={search} onChange={e => setSearch(e.target.value)} onClick={e => e.stopPropagation()} />
                     </div>
                     <div className="searchable-select-options">
                         <div className={`searchable-select-option ${!value ? 'selected' : ''}`} onClick={() => handleSelect('')}>
                             {placeholder}
                         </div>
                         {filtered.map(o => (
-                            <div key={o.id} className={`searchable-select-option ${o.id === value ? 'selected' : ''}`} onClick={() => handleSelect(o.id)}>
-                                {o.name}
+                            <div key={o.id}
+                                className={`searchable-select-option ${o.id === value ? 'selected' : ''}`}
+                                onClick={() => handleSelect(o.id)}
+                                style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.2 }}>
+                                <span style={{ fontWeight: 500, fontSize: 12 }}>{o.name}</span>
+                                {o.subtitle && (
+                                    <span style={{
+                                        fontSize: 10,
+                                        color: o.id === value ? 'rgba(255,255,255,0.8)' : 'var(--primary)',
+                                        fontWeight: 400
+                                    }}>{o.subtitle}</span>
+                                )}
                             </div>
                         ))}
                         {filtered.length === 0 && <div className="searchable-select-option-empty">No results found</div>}
@@ -101,6 +114,9 @@ function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
 export default function GenerateWizard() {
     const navigate = useNavigate();
     const { toasts, addToast, removeToast } = useToast();
+    const { user } = useAuth();
+    const isDeptUser = user?.role === 'department_user';
+    const myDeptId = user?.departmentId || '';
     const [step, setStep] = useState(0);
     const [generating, setGenerating] = useState(false);
 
@@ -128,12 +144,26 @@ export default function GenerateWizard() {
 
     const loadAll = async () => {
         const [d, f, s, c, r, ts, m] = await Promise.all([
-            api.get('/departments'), api.get('/faculty'), api.get('/subjects'),
-            api.get('/classes'), api.get('/rooms'), api.get('/timeslots'),
+            api.get('/departments'),
+            api.get('/faculty?all=true'),
+            api.get('/subjects?all=true'),
+            api.get('/classes'),
+            api.get('/rooms'),
+            api.get('/timeslots'),
             api.get('/timetable/mappings/all')
         ]);
-        setDepartments(d.data); setFaculty(f.data); setSubjects(s.data);
-        setClasses(c.data); setRooms(r.data); setTimeSlotConfigs(ts.data);
+        setDepartments(d.data);
+        setRooms(r.data);
+        setTimeSlotConfigs(ts.data);
+
+        // Load all faculty and subjects to support cross-department mapping (e.g. assigning CSE faculty to ECE classes)
+        const allFaculty   = f.data;
+        const allSubjects  = s.data;
+        const allClasses   = c.data; // already scoped by backend for dept_user
+
+        setFaculty(allFaculty);
+        setSubjects(allSubjects);
+        setClasses(allClasses);
 
         // Initialize mapping state from DB
         const initialMappings = {};
@@ -148,11 +178,11 @@ export default function GenerateWizard() {
         });
 
         // Apply Advisor Defaults if missing from DB
-        c.data.forEach(cls => {
+        allClasses.forEach(cls => {
             if (!initialMappings[cls.id]) initialMappings[cls.id] = {};
-            
-            const relevantSubjects = s.data.filter(sub => 
-                Number(sub.year) === Number(cls.year) && 
+
+            const relevantSubjects = allSubjects.filter(sub =>
+                Number(sub.year) === Number(cls.year) &&
                 (!sub.departmentId || sub.departmentId === cls.departmentId)
             );
 
@@ -174,8 +204,8 @@ export default function GenerateWizard() {
         setClassMappings(initialMappings);
         setMappings(m.data);
 
-        setSelectedClasses(c.data.map(cl => cl.id));
-        if (c.data.length > 0) setActiveClassId(c.data[0].id);
+        setSelectedClasses(allClasses.map(cl => cl.id));
+        if (allClasses.length > 0) setActiveClassId(allClasses[0].id);
     };
 
     const toggleClass = (id) => {
@@ -383,12 +413,12 @@ export default function GenerateWizard() {
                                                 <div key={cId} onClick={() => setActiveClassId(cId)}
                                                     style={{
                                                         padding: '16px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)',
-                                                        background: isActive ? '#eff6ff' : 'transparent',
+                                                        background: isActive ? 'var(--primary-50)' : 'transparent',
                                                         borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent'
                                                     }}>
                                                     <div style={{ fontWeight: 700, fontSize: 13, color: isActive ? 'var(--primary-700)' : 'inherit' }}>{cls.name}</div>
                                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{mappedCount} / {clsSubjects.length} mapped</div>
-                                                    {isComplete ? <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 700, marginTop: 4 }}> Complete</div> : null}
+                                                    {isComplete ? <div style={{ fontSize: 10, color: '#2e7d32', fontWeight: 700, marginTop: 4 }}> Complete</div> : null}
                                                 </div>
                                             );
                                         })
@@ -401,7 +431,7 @@ export default function GenerateWizard() {
                                 {activeClassId ? (() => {
                                     const ac = classes.find(c => c.id === activeClassId);
                                     if (!ac) return null;
-                                    const relevantSubjects = subjects.filter(s => s.year === ac.year && (!s.departmentId || s.departmentId === ac.departmentId));
+                                    const relevantSubjects = subjects.filter(s => Number(s.year) === Number(ac.year) && (!s.departmentId || s.departmentId === ac.departmentId));
 
                                     return (
                                         <div className="card" style={{ padding: '20px', minHeight: 400, overflow: 'visible' }}>
@@ -433,7 +463,7 @@ export default function GenerateWizard() {
                                                             }
                                                         }
                                                         return (
-                                                            <div key={sub.id} style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start', background: '#fff', padding: '18px 20px', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', position: 'relative', overflow: 'visible' }}>
+                                                            <div key={sub.id} style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start', background: 'var(--card-bg)', padding: '18px 20px', borderRadius: 12, border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)', position: 'relative', overflow: 'visible' }}>
                                                                 {/* Subject Info */}
                                                                 <div style={{ flex: '0 0 100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                                                                     <div>
@@ -447,7 +477,7 @@ export default function GenerateWizard() {
                                                                             <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Assigned Lab:</span>
                                                                             <select
                                                                                 className="form-select"
-                                                                                style={{ fontSize: 10, padding: '2px 8px', height: 26, border: '1px solid #cbd5e1', borderRadius: 4 }}
+                                                                                style={{ fontSize: 10, padding: '2px 8px', height: 26, border: '1px solid var(--border-color)', borderRadius: 4 }}
                                                                                 value={mappingData.assignedLabId || ''}
                                                                                 onChange={e => handleLabChange(activeClassId, sub.id, e.target.value)}
                                                                             >
@@ -456,7 +486,7 @@ export default function GenerateWizard() {
                                                                                     <option key={r.id} value={r.id}>{r.name}</option>
                                                                                 ))}
                                                                             </select>
-                                                                            <span style={{ fontSize: 9, color: '#7c3aed', fontStyle: 'italic' }}>this section only</span>
+                                                                            <span style={{ fontSize: 9, color: 'var(--primary)', fontStyle: 'italic' }}>this section only</span>
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -464,7 +494,7 @@ export default function GenerateWizard() {
                                                                 {/* Dept Filter */}
                                                                 <div style={{ flex: '0 0 140px' }}>
                                                                     <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dept Filter</div>
-                                                                    <select className="form-select" style={{ fontSize: 11, height: 36, background: '#fff', border: '1px solid #d1d5db' }}
+                                                                    <select className="form-select" style={{ fontSize: 11, height: 36, background: 'var(--card-bg)', border: '1px solid var(--border-color)' }}
                                                                         value={rowDeptId}
                                                                         onChange={e => handleMappingChange(activeClassId, sub.id, 'tempDeptId', e.target.value)}>
                                                                         <option value="">All Depts</option>
@@ -476,7 +506,12 @@ export default function GenerateWizard() {
                                                                 <div style={{ flex: '1 1 160px' }}>
                                                                     <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Primary Faculty *</div>
                                                                     <SearchableSelect
-                                                                        options={faculty.filter(f => !rowDeptId || f.departmentId === rowDeptId)}
+                                                                        options={faculty
+                                                                            .filter(f => !rowDeptId || f.departmentId === rowDeptId)
+                                                                            .map(f => ({
+                                                                                ...f,
+                                                                                subtitle: departments.find(d => d.id === f.departmentId)?.name || ''
+                                                                            }))}
                                                                         value={mappingData.facultyId}
                                                                         onChange={val => handleMappingChange(activeClassId, sub.id, 'facultyId', val)}
                                                                         placeholder="Select Faculty"
@@ -488,7 +523,11 @@ export default function GenerateWizard() {
         <div style={{ flex: '1 1 160px' }}>
             <div style={{ fontSize: 9, color: 'var(--primary-600)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Co-Faculty 1 (optional)</div>
             <SearchableSelect
-                options={faculty.map(f => ({ id: f.id, name: f.name }))}
+                options={faculty.map(f => ({
+                    id: f.id,
+                    name: f.name,
+                    subtitle: departments.find(d => d.id === f.departmentId)?.name || ''
+                }))}
                 value={mappingData.labFaculty2Id || ''}
                 onChange={val => handleMappingChange(activeClassId, sub.id, 'labFaculty2Id', val)}
                 placeholder="Co-Faculty 1"
@@ -497,7 +536,11 @@ export default function GenerateWizard() {
         <div style={{ flex: '1 1 160px' }}>
             <div style={{ fontSize: 9, color: 'var(--primary-600)', marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Co-Faculty 2 (optional)</div>
             <SearchableSelect
-                options={faculty.map(f => ({ id: f.id, name: f.name }))}
+                options={faculty.map(f => ({
+                    id: f.id,
+                    name: f.name,
+                    subtitle: departments.find(d => d.id === f.departmentId)?.name || ''
+                }))}
                 value={mappingData.labFaculty3Id || ''}
                 onChange={val => handleMappingChange(activeClassId, sub.id, 'labFaculty3Id', val)}
                 placeholder="Co-Faculty 2"
@@ -585,7 +628,7 @@ export default function GenerateWizard() {
                         <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
                             <div className={`wizard-step ${idx === step ? 'active' : ''} ${idx < step ? 'completed' : ''}`}
                                 onClick={() => setStep(idx)} style={{ cursor: 'pointer' }}>
-                                <div className="wizard-step-number">{idx < step ? '✓' : idx + 1}</div>
+                                <div className="wizard-step-number">{idx + 1}</div>
                                 <span className="wizard-step-label">{s.label}</span>
                             </div>
                             {idx < STEPS.length - 1 && <div className={`wizard-connector ${idx < step ? 'completed' : ''}`} />}

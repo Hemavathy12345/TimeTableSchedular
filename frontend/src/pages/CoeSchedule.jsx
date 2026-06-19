@@ -2,22 +2,26 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import Modal from '../components/Modal';
 import { useToast, ToastContainer } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const YEARS = [1, 2, 3, 4];
 
 // COE color theme — soft indigo/violet
 const COE = {
-    bg:         'linear-gradient(135deg, #f5f3ff, #ede9fe)',
-    bgLight:    '#f5f3ff',
-    border:     '#c4b5fd',
-    borderDark: '#7c3aed',
-    text:       '#5b21b6',
-    textLight:  '#6d28d9',
+    bg:         'var(--primary-50)',
+    bgLight:    'var(--primary-50)',
+    border:     'var(--primary-200)',
+    borderDark: 'var(--primary)',
+    text:       'var(--primary-color)',
+    textLight:  'var(--navy)',
 };
 
 export default function CoeSchedule() {
     const [coeEntries, setCoeEntries] = useState([]);
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+    const canEdit = user?.role === 'admin' || user?.role === 'department_user';
     const [configs, setConfigs]       = useState([]);
     const [faculties, setFaculties]   = useState([]);
     const [sections, setSections]     = useState([]);
@@ -26,7 +30,7 @@ export default function CoeSchedule() {
     const [filterYear, setFilterYear] = useState('');
     const { toasts, addToast, removeToast } = useToast();
 
-    const defaultForm = { year: 1, label: 'COE', day: 'Monday', startSlotIndex: 0, endSlotIndex: 0, coFacultyId: '', section: 'All' };
+    const defaultForm = { year: 1, label: 'COE', day: 'Monday', startSlotIndex: 0, endSlotIndex: 0, coFacultyId: '', sections: ['All'] };
     const [form, setForm] = useState(defaultForm);
 
     useEffect(() => { load(); }, []);
@@ -35,8 +39,8 @@ export default function CoeSchedule() {
         const [coe, cfg, fac, cls] = await Promise.all([
             api.get('/coe'),
             api.get('/timeslots'),
-            api.get('/faculty'),
-            api.get('/classes')
+            api.get('/faculty?all=true'),
+            api.get('/classes?all=true')
         ]);
         setCoeEntries(coe.data);
         setConfigs(cfg.data);
@@ -73,7 +77,7 @@ export default function CoeSchedule() {
             startSlotIndex: entry.startSlotIndex,
             endSlotIndex:   entry.endSlotIndex,
             coFacultyId:    entry.coFacultyId || '',
-            section:        entry.section || 'All'
+            sections:       entry.sections && entry.sections.length > 0 ? entry.sections : [entry.section || 'All']
         });
         setShowModal(true);
     };
@@ -83,6 +87,9 @@ export default function CoeSchedule() {
         if (Number(form.startSlotIndex) > Number(form.endSlotIndex)) {
             addToast('Start slot must be before or equal to end slot', 'error'); return;
         }
+        if (!form.sections || form.sections.length === 0) {
+            addToast('At least one section must be selected', 'error'); return;
+        }
         try {
             const payload = {
                 year:           Number(form.year),
@@ -91,7 +98,7 @@ export default function CoeSchedule() {
                 startSlotIndex: Number(form.startSlotIndex),
                 endSlotIndex:   Number(form.endSlotIndex),
                 coFacultyId:    form.coFacultyId || null,
-                section:        form.section || 'All'
+                sections:       form.sections
             };
             if (editing) {
                 await api.put(`/coe/${editing.id}`, payload);
@@ -151,7 +158,7 @@ export default function CoeSchedule() {
                         <option value="">All Years</option>
                         {YEARS.map(y => <option key={y} value={y}>Year {y}</option>)}
                     </select>
-                    <button className="btn btn-primary" onClick={openAdd}>+ Add COE Block</button>
+                    {canEdit && <button className="btn btn-primary" onClick={openAdd}>+ Add COE Block</button>}
                 </div>
             </div>
 
@@ -169,7 +176,7 @@ export default function CoeSchedule() {
                             <th>End Slot</th>
                             <th>Co-Faculty</th>
                             <th>Duration</th>
-                            <th>Actions</th>
+                            {canEdit && <th>Actions</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -189,17 +196,23 @@ export default function CoeSchedule() {
                                     </span>
                                 </td>
                                 <td>
-                                    <span style={{
-                                        background: entry.section && entry.section !== 'All' ? '#ecfdf5' : '#f3f4f6',
-                                        color: entry.section && entry.section !== 'All' ? '#047857' : '#4b5563',
-                                        border: entry.section && entry.section !== 'All' ? '1px solid #a7f3d0' : '1px solid #e5e7eb',
-                                        borderRadius: 6,
-                                        padding: '3px 10px',
-                                        fontSize: 12,
-                                        fontWeight: 700
-                                    }}>
-                                        {entry.section || 'All'}
-                                    </span>
+                                    {(() => {
+                                        const entrySections = entry.sections && entry.sections.length > 0 ? entry.sections : [entry.section || 'All'];
+                                        const isAll = entrySections.includes('All');
+                                        return (
+                                            <span style={{
+                                                background: !isAll ? 'var(--gold-l)' : 'var(--bg-color)',
+                                                color: !isAll ? 'var(--navy)' : 'var(--text-secondary)',
+                                                border: !isAll ? '1px solid var(--gold)' : '1px solid var(--border-color)',
+                                                borderRadius: 6,
+                                                padding: '3px 10px',
+                                                fontSize: 12,
+                                                fontWeight: 700
+                                            }}>
+                                                {entrySections.join(', ')}
+                                            </span>
+                                        );
+                                    })()}
                                 </td>
                                 <td>
                                     <span style={{
@@ -226,27 +239,31 @@ export default function CoeSchedule() {
                                 </td>
                                 <td>
                                     <span className="badge" style={{
-                                        background: '#f0f9ff',
-                                        color: '#0369a1',
-                                        border: '1px solid #7dd3fc'
+                                        background: 'var(--primary-50)',
+                                        color: 'var(--primary-color)',
+                                        border: '1px solid var(--primary-200)'
                                     }}>
                                         {durationLabel(entry)}
                                     </span>
                                 </td>
-                                <td>
-                                    <div className="table-actions">
-                                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(entry)}>Edit</button>
-                                        <button className="btn btn-danger btn-sm" onClick={() => remove(entry.id)}>Delete</button>
-                                    </div>
-                                </td>
+                                {canEdit && (
+                                    <td>
+                                        <div className="table-actions">
+                                            <button className="btn btn-secondary btn-sm" onClick={() => openEdit(entry)}>Edit</button>
+                                            <button className="btn btn-danger btn-sm" onClick={() => remove(entry.id)}>Delete</button>
+                                        </div>
+                                    </td>
+                                )}
                             </tr>
                         ))}
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={9} className="empty-state">
+                                <td colSpan={canEdit ? 9 : 8} className="empty-state">
                                     {filterYear
                                         ? `No COE blocks defined for Year ${filterYear}.`
-                                        : 'No COE blocks defined yet. Click "+ Add COE Block" to create one.'}
+                                        : isAdmin 
+                                            ? 'No COE blocks defined yet. Click "+ Add COE Block" to create one.'
+                                            : 'No COE blocks defined yet.'}
                                 </td>
                             </tr>
                         )}
@@ -287,7 +304,15 @@ export default function CoeSchedule() {
                                             <span style={{ fontWeight: 700, color: COE.text }}></span>
                                             <div style={{ flex: 1 }}>
                                                 <div style={{ fontWeight: 600, color: COE.text }}>
-                                                    {e.label} {e.section && e.section !== 'All' ? `(Sec ${e.section})` : '(All Sections)'}
+                                                    {(() => {
+                                                        const entrySections = e.sections && e.sections.length > 0 ? e.sections : [e.section || 'All'];
+                                                        const isAll = entrySections.includes('All');
+                                                        return (
+                                                            <>
+                                                                {e.label} {!isAll ? `(Sec ${entrySections.join(', ')})` : '(All Sections)'}
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 {e.coFacultyId && (
                                                     <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 2 }}>
@@ -351,18 +376,46 @@ export default function CoeSchedule() {
                 {/* Section selection */}
                 <div className="form-group">
                     <label className="form-label">Section <span style={{ color: 'var(--error)' }}>*</span></label>
-                    <select
-                        className="form-select"
-                        value={form.section}
-                        onChange={e => setForm({ ...form, section: e.target.value })}
-                    >
-                        <option value="All">All Sections</option>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                        <label className="checkbox-item" style={{ flex: '1 1 120px', minWidth: 120, margin: 0 }}>
+                            <input
+                                type="checkbox"
+                                checked={form.sections ? form.sections.includes('All') : true}
+                                onChange={e => {
+                                    if (e.target.checked) {
+                                        setForm({ ...form, sections: ['All'] });
+                                    } else {
+                                        setForm({ ...form, sections: [] });
+                                    }
+                                }}
+                            />
+                            <strong>All Sections</strong>
+                        </label>
                         {sections.map(s => (
-                            <option key={s} value={s}>Section {s}</option>
+                            <label key={s} className="checkbox-item" style={{ flex: '1 1 120px', minWidth: 120, margin: 0 }}>
+                                <input
+                                    type="checkbox"
+                                    checked={form.sections ? form.sections.includes(s) : false}
+                                    onChange={e => {
+                                        let newSects = form.sections ? [...form.sections] : [];
+                                        if (e.target.checked) {
+                                            newSects = newSects.filter(x => x !== 'All');
+                                            newSects.push(s);
+                                        } else {
+                                            newSects = newSects.filter(x => x !== s);
+                                        }
+                                        if (newSects.length === 0) {
+                                            newSects = ['All'];
+                                        }
+                                        setForm({ ...form, sections: newSects });
+                                    }}
+                                />
+                                <span>Section {s}</span>
+                            </label>
                         ))}
-                    </select>
+                    </div>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                        Choose whether this block applies to all sections or a specific class section of this year
+                        Choose whether this block applies to all sections or specific class sections of this year
                     </span>
                 </div>
 
@@ -462,7 +515,7 @@ export default function CoeSchedule() {
                     marginTop: 4
                 }}>
                     <strong> Block preview:</strong>&nbsp;
-                    Year {form.year} · {form.day} · Slots {Number(form.startSlotIndex) + 1}–{Number(form.endSlotIndex) + 1}&nbsp;
+                    Year {form.year} {form.sections && !form.sections.includes('All') ? `(Sec ${form.sections.join(', ')})` : '(All Sections)'} · {form.day} · Slots {Number(form.startSlotIndex) + 1}–{Number(form.endSlotIndex) + 1}&nbsp;
                     ({Number(form.endSlotIndex) - Number(form.startSlotIndex) + 1} slot
                     {Number(form.endSlotIndex) - Number(form.startSlotIndex) + 1 !== 1 ? 's' : ''})
                     {(() => {

@@ -264,10 +264,10 @@ export default function Subjects() {
             </Modal>
 
             {/* Import Excel Modal */}
-            <Modal isOpen={showImportModal} onClose={() => setShowImportModal(false)} title="📥 Import Subjects from Excel"
+            <Modal isOpen={showImportModal} onClose={() => setShowImportModal(false)} title="Import Subjects from Excel"
                 footer={
                     <>
-                        <button className="btn btn-secondary" onClick={downloadTemplate}>⬇ Download Template</button>
+                        <button className="btn btn-secondary" onClick={downloadTemplate}>Download Template</button>
                         <button className="btn btn-secondary" onClick={() => setShowImportModal(false)}>Cancel</button>
                         <button className="btn btn-primary" onClick={handleImport} disabled={importing || importData.length === 0}>
                             {importing ? 'Importing...' : `Import ${importData.length > 0 ? `(${importData.length} rows)` : ''}`}
@@ -316,7 +316,7 @@ export default function Subjects() {
                                     </tr>
                                 ))}
                                 {importData.length > 10 && (
-                                    <tr><td colSpan={7} style={{ textAlign: 'center', color: '#888' }}>...and {importData.length - 10} more rows</td></tr>
+                                    <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>...and {importData.length - 10} more rows</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -325,9 +325,9 @@ export default function Subjects() {
 
                 {/* Errors */}
                 {importErrors.length > 0 && (
-                    <div style={{ marginTop: 12, background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: 8, padding: '10px 14px', maxHeight: 120, overflowY: 'auto' }}>
-                        <strong style={{ color: '#c53030', fontSize: 13 }}> Errors ({importErrors.length})</strong>
-                        <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#742a2a' }}>
+                    <div style={{ marginTop: 12, background: '#fff0f0', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', maxHeight: 120, overflowY: 'auto' }}>
+                        <strong style={{ color: 'var(--error)', fontSize: 13 }}> Errors ({importErrors.length})</strong>
+                        <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--error)' }}>
                             {importErrors.map((e, i) => <li key={i}>{e}</li>)}
                         </ul>
                     </div>

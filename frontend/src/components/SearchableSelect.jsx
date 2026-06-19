@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 
 /**
  * A premium searchable select component.
- * @param {Array} options - List of { id, name } objects.
+ * @param {Array} options - List of { id, name, subtitle? } objects.
+ *   subtitle is shown as a muted secondary line in the dropdown and next to the selected value.
  * @param {string} value - Current selected ID.
  * @param {function} onChange - Callback when selection changes.
  * @param {string} placeholder - Search placeholder.
@@ -16,9 +17,13 @@ export default function SearchableSelect({ options = [], value, onChange, placeh
 
     const selectedOption = options.find(opt => opt.id === value);
 
-    const filteredOptions = options.filter(opt =>
-        opt.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredOptions = options.filter(opt => {
+        const q = searchTerm.toLowerCase();
+        return (
+            opt.name.toLowerCase().includes(q) ||
+            (opt.subtitle && opt.subtitle.toLowerCase().includes(q))
+        );
+    });
 
     // Close when clicking outside
     useEffect(() => {
@@ -71,8 +76,19 @@ export default function SearchableSelect({ options = [], value, onChange, placeh
     return (
         <div className="searchable-select-container" ref={containerRef} style={style} onKeyDown={handleKeyDown}>
             <div className={`searchable-select-display ${isOpen ? 'active' : ''}`} onClick={() => setIsOpen(!isOpen)}>
-                <span className="selected-value">
-                    {selectedOption ? selectedOption.name : placeholder}
+                <span className="selected-value" style={{ display: 'flex', flexDirection: 'column', gap: 1, lineHeight: 1.2 }}>
+                    {selectedOption ? (
+                        <>
+                            <span>{selectedOption.name}</span>
+                            {selectedOption.subtitle && (
+                                <span style={{ fontSize: 10, color: 'var(--text-muted, #94a3b8)', fontWeight: 400 }}>
+                                    {selectedOption.subtitle}
+                                </span>
+                            )}
+                        </>
+                    ) : (
+                        <span style={{ color: 'var(--text-muted, #94a3b8)' }}>{placeholder}</span>
+                    )}
                 </span>
                 <span className="dropdown-caret">▼</span>
             </div>
@@ -95,8 +111,21 @@ export default function SearchableSelect({ options = [], value, onChange, placeh
                                     key={opt.id}
                                     className={`searchable-select-option ${opt.id === value ? 'selected' : ''} ${idx === highlightedIndex ? 'highlighted' : ''}`}
                                     onClick={() => handleSelect(opt)}
+                                    style={{ display: 'flex', flexDirection: 'column', gap: 1 }}
                                 >
-                                    {opt.name}
+                                    <span style={{ fontWeight: 500 }}>{opt.name}</span>
+                                    {opt.subtitle && (
+                                        <span style={{
+                                            fontSize: 10,
+                                            color: opt.id === value ? 'rgba(255,255,255,0.75)' : 'var(--text-muted, #94a3b8)',
+                                            fontWeight: 400,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 3
+                                        }}>
+                                            {opt.subtitle}
+                                        </span>
+                                    )}
                                 </div>
                             ))
                         ) : (

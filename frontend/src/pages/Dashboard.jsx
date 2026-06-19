@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -68,17 +69,18 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {user?.role === 'admin' && (
-                <div className="card">
-                    <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Quick Actions</h2>
-                    <div className="btn-group" style={{ flexWrap: 'wrap' }}>
-                        <a href="/generate" className="btn btn-primary">Generate New Timetable</a>
-                        <a href="/departments" className="btn btn-secondary">Manage Departments</a>
-                        <a href="/faculty" className="btn btn-secondary">Manage Faculty</a>
-                        <a href="/timetables" className="btn btn-secondary">View Timetables</a>
-                    </div>
+            <div className="card">
+                <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Quick Actions</h2>
+                <div className="btn-group" style={{ flexWrap: 'wrap' }}>
+                    <Link to="/generate" className="btn btn-primary">Generate New Timetable</Link>
+                    {user?.role === 'admin' && <Link to="/departments" className="btn btn-secondary">Manage Departments</Link>}
+                    <Link to="/faculty" className="btn btn-secondary">Manage Faculty</Link>
+                    <Link to="/timetables" className="btn btn-secondary">View Timetables</Link>
+                    {user?.role === 'admin' && <Link to="/timeslots" className="btn btn-secondary">Manage Time Slots</Link>}
+                    <Link to="/classes" className="btn btn-secondary">Manage Classes</Link>
+                    <Link to="/rooms" className="btn btn-secondary">Manage Rooms</Link>
                 </div>
-            )}
+            </div>
         </div>
     );
 }

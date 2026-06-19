@@ -8,3 +8,5 @@ export { default as TimeSlotConfig } from './TimeSlotConfig.js';
 export { default as Timetable } from './Timetable.js';
 export { default as FacultySubjectMapping } from './FacultySubjectMapping.js';
 export { default as Coe } from './Coe.js';
+export { default as TimetableReservation } from './TimetableReservation.js';
+export { default as AuditLog } from './AuditLog.js';

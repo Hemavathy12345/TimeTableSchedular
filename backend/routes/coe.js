@@ -18,10 +18,10 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 });
 
-// POST /api/coe  – create a new COE entry (admin only)
-router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
+// POST /api/coe  – create a new COE entry (admin or department_user)
+router.post('/', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
-        const { year, label, day, startSlotIndex, endSlotIndex, coFacultyId, section } = req.body;
+        const { year, label, day, startSlotIndex, endSlotIndex, coFacultyId, section, sections } = req.body;
 
         if (!year || !day || startSlotIndex === undefined || endSlotIndex === undefined) {
             return res.status(400).json({ error: 'year, day, startSlotIndex and endSlotIndex are required' });
@@ -41,13 +41,18 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
             }
         }
 
-        // Check for overlapping COE entries for the same year+day+section
-        const targetSection = section || 'All';
+        // Resolve target sections array
+        let targetSections = sections;
+        if (!targetSections || !Array.isArray(targetSections) || targetSections.length === 0) {
+            targetSections = [section || 'All'];
+        }
+
+        // Check for overlapping COE entries for the same year+day+sections
         const existing = await Coe.find({ year: Number(year), day }).lean();
         const overlap = existing.some(e => {
             const timeOverlap = Number(startSlotIndex) <= e.endSlotIndex && Number(endSlotIndex) >= e.startSlotIndex;
-            const sect = e.section || 'All';
-            const sectionOverlap = (targetSection === 'All' || sect === 'All' || targetSection === sect);
+            const eSections = e.sections && e.sections.length > 0 ? e.sections : [e.section || 'All'];
+            const sectionOverlap = targetSections.includes('All') || eSections.includes('All') || targetSections.some(s => eSections.includes(s));
             return timeOverlap && sectionOverlap;
         });
         if (overlap) {
@@ -62,7 +67,8 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
             startSlotIndex: Number(startSlotIndex),
             endSlotIndex:   Number(endSlotIndex),
             coFacultyId:    coFacultyId || null,
-            section:        targetSection
+            section:        targetSections[0],
+            sections:       targetSections
         });
 
         res.status(201).json(entry.toObject());
@@ -71,17 +77,27 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
     }
 });
 
-// PUT /api/coe/:id  – update an existing COE entry (admin only)
-router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+// PUT /api/coe/:id — admin or department_user can edit
+router.put('/:id', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
-        const { label, day, startSlotIndex, endSlotIndex, coFacultyId, section } = req.body;
+        const { label, day, startSlotIndex, endSlotIndex, coFacultyId, section, sections } = req.body;
         const coe = await Coe.findOne({ id: req.params.id });
         if (!coe) return res.status(404).json({ error: 'COE entry not found' });
 
         const newStart = startSlotIndex !== undefined ? Number(startSlotIndex) : coe.startSlotIndex;
         const newEnd   = endSlotIndex   !== undefined ? Number(endSlotIndex)   : coe.endSlotIndex;
         const newDay   = day || coe.day;
-        const newSection = section !== undefined ? (section || 'All') : (coe.section || 'All');
+
+        let newSections = sections;
+        if (newSections === undefined) {
+            if (section !== undefined) {
+                newSections = [section || 'All'];
+            } else {
+                newSections = coe.sections && coe.sections.length > 0 ? coe.sections : [coe.section || 'All'];
+            }
+        } else if (!Array.isArray(newSections) || newSections.length === 0) {
+            newSections = [section || 'All'];
+        }
 
         if (newStart > newEnd) {
             return res.status(400).json({ error: 'startSlotIndex must be <= endSlotIndex' });
@@ -99,8 +115,8 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
         const existing = await Coe.find({ year: coe.year, day: newDay, id: { $ne: coe.id } }).lean();
         const overlap = existing.some(e => {
             const timeOverlap = newStart <= e.endSlotIndex && newEnd >= e.startSlotIndex;
-            const sect = e.section || 'All';
-            const sectionOverlap = (newSection === 'All' || sect === 'All' || newSection === sect);
+            const eSections = e.sections && e.sections.length > 0 ? e.sections : [e.section || 'All'];
+            const sectionOverlap = newSections.includes('All') || eSections.includes('All') || newSections.some(s => eSections.includes(s));
             return timeOverlap && sectionOverlap;
         });
         if (overlap) {
@@ -111,7 +127,11 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
         if (day            !== undefined) coe.day            = day;
         if (startSlotIndex !== undefined) coe.startSlotIndex = newStart;
         if (endSlotIndex   !== undefined) coe.endSlotIndex   = newEnd;
-        if (section        !== undefined) coe.section        = newSection;
+
+        // Update both fields to remain in sync
+        coe.sections = newSections;
+        coe.section  = newSections[0];
+
         // Allow clearing (null/'') or setting coFacultyId
         if (coFacultyId !== undefined) coe.coFacultyId = coFacultyId || null;
 
@@ -122,8 +142,8 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
     }
 });
 
-// DELETE /api/coe/:id  – remove a COE entry (admin only)
-router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+// DELETE /api/coe/:id  – remove a COE entry (admin or department_user)
+router.delete('/:id', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
         const deleted = await Coe.findOneAndDelete({ id: req.params.id });
         if (!deleted) return res.status(404).json({ error: 'COE entry not found' });

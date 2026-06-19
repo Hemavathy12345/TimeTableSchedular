@@ -9,9 +9,15 @@ const router = Router();
 router.get('/', authenticateToken, async (req, res) => {
     try {
         const filter = {};
-        if (req.query.departmentId) filter.departmentId = req.query.departmentId;
+        if (req.query.departmentId && req.query.departmentId !== 'null' && req.query.departmentId !== 'undefined') {
+            filter.departmentId = req.query.departmentId;
+        } else if (req.user.role === 'department_user' && req.user.departmentId && req.query.all !== 'true') {
+            filter.departmentId = req.user.departmentId;
+        }
+
         if (req.query.year) filter.year = parseInt(req.query.year);
         if (req.query.type) filter.type = req.query.type;
+
         const subjects = await Subject.find(filter).lean();
         res.json(subjects);
     } catch (err) {
@@ -31,11 +37,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // Helper: derive totalHours and duration from type
-// totalHours = total semester hours (scheduler divides by 15 to get weekly periods)
 const deriveSubjectDefaults = (type, totalHours, duration) => {
     const hours = parseInt(totalHours) || 15;
-    // Default duration by type: lab/project = 2 consecutive, theory/elective/non-academic = 1
-    // Exception: Non-Academic subjects with 2 periods per week (30 total hours) default to 2
     let defaultDuration = (type === 'lab' || type === 'project') ? 2 : 1;
     if (type === 'Non-Academic' && Math.ceil(hours / 15) === 2) {
         defaultDuration = 2;
@@ -45,17 +48,26 @@ const deriveSubjectDefaults = (type, totalHours, duration) => {
 };
 
 // POST /api/subjects
-router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
         const { name, code, type, totalHours, year, departmentId, duration, assignedLabId } = req.body;
         if (!name || !code || !type) return res.status(400).json({ error: 'Name, code, and type required' });
+
+        let targetDeptId = departmentId || null;
+        if (req.user.role === 'department_user') {
+            if (departmentId && departmentId !== req.user.departmentId) {
+                return res.status(403).json({ error: 'Access denied. Cannot create subject for another department.' });
+            }
+            targetDeptId = req.user.departmentId;
+        }
+
         const derived = deriveSubjectDefaults(type, totalHours, duration);
         const sub = await Subject.create({
             id: `sub-${uuidv4().slice(0, 8)}`,
             name, code, type,
             totalHours: derived.totalHours,
             year: year || 1,
-            departmentId: departmentId || null,
+            departmentId: targetDeptId,
             duration: derived.duration,
             assignedLabId: assignedLabId || null
         });
@@ -66,8 +78,23 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
 });
 
 // PUT /api/subjects/:id
-router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+router.put('/:id', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
+        const query = { id: req.params.id };
+        if (req.user.role === 'department_user') {
+            // Cannot update global subjects or subjects of other departments
+            const checkSub = await Subject.findOne({ id: req.params.id }).lean();
+            if (!checkSub) return res.status(404).json({ error: 'Subject not found' });
+            if (checkSub.departmentId !== req.user.departmentId) {
+                return res.status(403).json({ error: 'Access denied. You cannot modify this subject.' });
+            }
+            query.departmentId = req.user.departmentId;
+
+            if (req.body.departmentId && req.body.departmentId !== req.user.departmentId) {
+                return res.status(400).json({ error: 'Cannot change subject department to another department.' });
+            }
+        }
+
         const { type, totalHours, duration } = req.body;
         let updateBody = { ...req.body };
         if (type && totalHours !== undefined) {
@@ -75,12 +102,13 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
             updateBody.totalHours = derived.totalHours;
             updateBody.duration = derived.duration;
         }
+
         const sub = await Subject.findOneAndUpdate(
-            { id: req.params.id },
+            query,
             { $set: updateBody },
             { new: true, lean: true }
         );
-        if (!sub) return res.status(404).json({ error: 'Subject not found' });
+        if (!sub) return res.status(404).json({ error: 'Subject not found or access denied' });
         res.json(sub);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -88,17 +116,22 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
 });
 
 // DELETE /api/subjects/:id
-router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+router.delete('/:id', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
-        const result = await Subject.deleteOne({ id: req.params.id });
-        if (result.deletedCount === 0) return res.status(404).json({ error: 'Subject not found' });
+        const query = { id: req.params.id };
+        if (req.user.role === 'department_user') {
+            query.departmentId = req.user.departmentId;
+        }
+
+        const result = await Subject.deleteOne(query);
+        if (result.deletedCount === 0) return res.status(404).json({ error: 'Subject not found or access denied' });
         res.json({ message: 'Subject deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Helper: parse year — handles integers and Roman numerals (I, II, III, IV)
+// Helper: parse year
 const parseYear = (val) => {
     if (!val) return 1;
     const s = String(val).trim().toUpperCase();
@@ -109,17 +142,14 @@ const parseYear = (val) => {
 };
 
 // POST /api/subjects/import-excel
-router.post('/import-excel', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/import-excel', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
-        const { data } = req.body; // Array of rows from Excel
+        const { data } = req.body;
         if (!Array.isArray(data) || data.length === 0) {
             return res.status(400).json({ error: 'Invalid data format. Expected array of subject records.' });
         }
 
-        // Pre-load all departments for name/code lookup
         const allDepts = await Department.find({}).lean();
-        console.log(`📚 Departments loaded for import: ${allDepts.map(d => d.code).join(', ')}`);
-
         const deptByCode = {};
         const deptByName = {};
         allDepts.forEach(d => {
@@ -127,7 +157,6 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
             if (d.name) {
                 const nameLow = d.name.trim().toLowerCase();
                 deptByName[nameLow] = d.id;
-                // Add alias for '&' vs 'and'
                 if (nameLow.includes('&')) deptByName[nameLow.replace('&', 'and')] = d.id;
                 if (nameLow.includes('and')) deptByName[nameLow.replace('and', '&')] = d.id;
             }
@@ -138,7 +167,6 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
         for (let i = 0; i < data.length; i++) {
             const record = data[i];
 
-            // Normalize fields from possible aliases
             const name = String(record.name || record['Course Name'] || record['Course Title'] || '').trim();
             const code = String(record.code || record['Course Code'] || '').trim();
             const typeRaw = String(record.type || record.Type || record['Type (Theory/Lab)'] || record['Type (Theory/Lab/Project/Elective)'] || '').trim().toLowerCase();
@@ -147,14 +175,12 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
             const yearRaw = record.year || record.Year;
             const deptRaw = String(record.department || record.Department || record.departmentId || record.DepartmentId || '').trim();
 
-            // Validate required fields
             if (!name || !code || !typeRaw) {
                 results.failed++;
                 results.errors.push(`Row ${i + 1}: Missing name, code, or type`);
                 continue;
             }
 
-            // Validate type — handle all types + variants
             let typeVal = 'theory';
             if (typeRaw.includes('lab')) {
                 typeVal = 'lab';
@@ -167,24 +193,22 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
             } else if (typeRaw.includes('theory')) {
                 typeVal = 'theory';
             } else {
-                typeVal = 'theory'; // fallback
+                typeVal = 'theory';
             }
 
-            // Resolve department
             let deptId = null;
-            if (deptRaw) {
-                // Try code lookup first (e.g. "CSE", "ECE"), then name lookup
+            if (req.user.role === 'department_user') {
+                deptId = req.user.departmentId;
+            } else if (deptRaw) {
                 deptId = deptByCode[deptRaw.toLowerCase()]
                     || deptByName[deptRaw.toLowerCase()]
                     || null;
 
-                // If still not found, check if the raw value IS a real DB id (starts with 'dept-')
                 if (!deptId && deptRaw.startsWith('dept-')) {
                     deptId = deptRaw;
                 }
 
                 if (!deptId) {
-                    // Warn but DO NOT skip — import with null department
                     results.errors.push(`Row ${i + 1}: Warning — Department "${deptRaw}" not found in system, imported without department.`);
                 }
             }
@@ -215,11 +239,17 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
 });
 
 // POST /api/subjects/bulk-delete
-router.post('/bulk-delete', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/bulk-delete', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
-        const result = await Subject.deleteMany({ id: { $in: ids } });
+
+        const query = { id: { $in: ids } };
+        if (req.user.role === 'department_user') {
+            query.departmentId = req.user.departmentId;
+        }
+
+        const result = await Subject.deleteMany(query);
         res.json({ message: `${result.deletedCount} subjects deleted` });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -227,4 +257,3 @@ router.post('/bulk-delete', authenticateToken, requireRole('admin'), async (req,
 });
 
 export default router;
-

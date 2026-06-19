@@ -73,7 +73,7 @@ export default function Faculty() {
         try {
             const reader = new FileReader();
             reader.onerror = (error) => {
-                console.error('❌ FileReader error:', error);
+                console.error('FileReader error:', error);
                 addToast('Error reading file', 'error');
             };
 

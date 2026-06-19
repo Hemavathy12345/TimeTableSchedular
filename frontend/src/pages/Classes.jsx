@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import Modal from '../components/Modal';
 import { useToast, ToastContainer } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 
 export default function Classes() {
     const [classes, setClasses] = useState([]);
@@ -13,6 +14,10 @@ export default function Classes() {
     const [form, setForm] = useState({ name: '', year: 1, section: 'A', departmentId: '', defaultRoomId: '', advisorId: '', tutor1Id: '', tutor2Id: '' });
     const { toasts, addToast, removeToast } = useToast();
     const [selectedIds, setSelectedIds] = useState([]);
+    const [filters, setFilters] = useState({ dept: '', year: '' });
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+    const myDeptId = user?.departmentId;
 
     useEffect(() => { load(); }, []);
 
@@ -20,6 +25,16 @@ export default function Classes() {
         const [c, d, r, f] = await Promise.all([api.get('/classes'), api.get('/departments'), api.get('/rooms'), api.get('/faculty')]);
         setClasses(c.data); setDepartments(d.data); setRooms(r.data); setFaculty(f.data);
         setSelectedIds([]);
+
+        // Default to CSE department if found in the list for admin, otherwise myDeptId
+        if (isAdmin) {
+            const cseDept = d.data.find(dept => (dept.code || '').toUpperCase() === 'CSE' || (dept.name || '').toLowerCase().includes('computer science'));
+            if (cseDept) {
+                setFilters(prev => ({ ...prev, dept: cseDept.id }));
+            }
+        } else if (myDeptId) {
+            setFilters(prev => ({ ...prev, dept: myDeptId }));
+        }
     };
 
     const deptName = (id) => departments.find(d => d.id === id)?.name || '-';
@@ -29,7 +44,7 @@ export default function Classes() {
         setEditing(null);
         setForm({
             name: '', year: 1, section: 'A',
-            departmentId: departments[0]?.id || '',
+            departmentId: isAdmin ? (departments[0]?.id || '') : myDeptId,
             defaultRoomId: '',
             advisorId: '',
             tutor1Id: '',
@@ -78,9 +93,15 @@ export default function Classes() {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
     };
 
+    const filteredClasses = classes.filter(c => {
+        if (filters.dept && c.departmentId !== filters.dept) return false;
+        if (filters.year && c.year.toString() !== filters.year) return false;
+        return true;
+    });
+
     const toggleSelectAll = () => {
-        if (selectedIds.length === classes.length) setSelectedIds([]);
-        else setSelectedIds(classes.map(c => c.id));
+        if (selectedIds.length === filteredClasses.length) setSelectedIds([]);
+        else setSelectedIds(filteredClasses.map(c => c.id));
     };
 
     return (
@@ -92,28 +113,40 @@ export default function Classes() {
                     <p className="page-subtitle">Manage class sections by year and department</p>
                 </div>
                 <div className="btn-group">
-                    {selectedIds.length > 0 && (
+                    {isAdmin && (
+                        <select className="form-select" style={{ width: 180 }} value={filters.dept} onChange={e => setFilters({ ...filters, dept: e.target.value })}>
+                            <option value="">All Departments</option>
+                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                    )}
+                    <select className="form-select" style={{ width: 120 }} value={filters.year} onChange={e => setFilters({ ...filters, year: e.target.value })}>
+                        <option value="">All Years</option>
+                        {[1, 2, 3, 4].map(y => <option key={y} value={y}>Year {y}</option>)}
+                    </select>
+                    {(isAdmin || myDeptId) && selectedIds.length > 0 && (
                         <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
                     )}
-                    <button className="btn btn-primary" onClick={openAdd}>+ Add Class</button>
+                    {(isAdmin || myDeptId) && <button className="btn btn-primary" onClick={openAdd}>+ Add Class</button>}
                 </div>
             </div>
             <div className="data-table-wrapper">
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th style={{ width: 40 }}>
-                                <input type="checkbox" checked={classes.length > 0 && selectedIds.length === classes.length} onChange={toggleSelectAll} />
-                            </th>
-                            <th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Default Room</th><th>Class Advisor</th><th>Tutor 1</th><th>Tutor 2</th><th>Actions</th>
+                            {(isAdmin || myDeptId) && <th style={{ width: 40 }}>
+                                <input type="checkbox" checked={filteredClasses.length > 0 && selectedIds.length === filteredClasses.length} onChange={toggleSelectAll} />
+                            </th>}
+                            <th>Name</th><th>Year</th><th>Section</th><th>Department</th><th>Default Room</th><th>Class Advisor</th><th>Tutor 1</th><th>Tutor 2</th>{(isAdmin || myDeptId) && <th>Actions</th>}
                         </tr>
                     </thead>
                     <tbody>
-                        {classes.map(c => (
+                        {filteredClasses.map(c => {
+                            const canWrite = isAdmin || c.departmentId === myDeptId;
+                            return (
                             <tr key={c.id} className={selectedIds.includes(c.id) ? 'row-selected' : ''}>
-                                <td>
-                                    <input type="checkbox" checked={selectedIds.includes(c.id)} onChange={() => toggleSelect(c.id)} />
-                                </td>
+                                {(isAdmin || myDeptId) && <td>
+                                    {canWrite && <input type="checkbox" checked={selectedIds.includes(c.id)} onChange={() => toggleSelect(c.id)} />}
+                                </td>}
                                 <td style={{ fontWeight: 600 }}>{c.name}</td>
                                 <td>Year {c.year}</td>
                                 <td><span className="badge badge-success">{c.section}</span></td>
@@ -122,15 +155,15 @@ export default function Classes() {
                                 <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{advisorName(c.advisorId)}</td>
                                 <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{advisorName(c.tutor1Id)}</td>
                                 <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{advisorName(c.tutor2Id)}</td>
-                                <td>
-                                    <div className="table-actions">
+                                {(isAdmin || myDeptId) && <td>
+                                    {canWrite && <div className="table-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
                                         <button className="btn btn-danger btn-sm" onClick={() => remove(c.id)}>Delete</button>
-                                    </div>
-                                </td>
+                                    </div>}
+                                </td>}
                             </tr>
-                        ))}
-                        {classes.length === 0 && <tr><td colSpan={8} className="empty-state">No classes found</td></tr>}
+                        )})}
+                        {filteredClasses.length === 0 && <tr><td colSpan={(isAdmin || myDeptId) ? 10 : 8} className="empty-state">No classes found</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -154,8 +187,8 @@ export default function Classes() {
                 </div>
                 <div className="form-group">
                     <label className="form-label">Department</label>
-                    <select className="form-select" value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })}>
-                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    <select className="form-select" value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })} disabled={!isAdmin}>
+                        {(isAdmin ? departments : departments.filter(d => d.id === myDeptId)).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                 </div>
                 <div className="form-group">

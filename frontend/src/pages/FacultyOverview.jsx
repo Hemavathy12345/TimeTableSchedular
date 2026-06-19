@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+
 
 // Helper to convert "HH:MM" to minutes
 const timeToMins = (timeStr) => {
@@ -24,6 +26,7 @@ const RULER_HEIGHT = 36;    // px for top ruler
 export default function FacultyOverview() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -79,38 +82,30 @@ export default function FacultyOverview() {
         fs.facultyName.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Recalculate total overlaps across all faculty for the indicator header
-    let computedTotalConflicts = 0;
+    // Recount total overlaps as UNIQUE PAIRS (accurate for any number of overlapping sessions)
+    let totalOverlaps = 0;
     facultySchedules.forEach(fs => {
         const dayRows = {};
         fs.entries.forEach(e => {
             if (!dayRows[e.day]) dayRows[e.day] = [];
             dayRows[e.day].push(e);
         });
-
-        // For each day, find entries that overlap in time
         Object.values(dayRows).forEach(dayEntries => {
-            dayEntries.forEach((e, idx) => {
+            dayEntries.forEach((e, i) => {
                 const s1 = timeToMins(e.startTime);
                 const e1 = timeToMins(e.endTime);
                 if (!s1 || !e1) return;
-
-                const hasOverlap = dayEntries.some((ee, idx2) => {
-                    if (idx === idx2) return false;
+                dayEntries.forEach((ee, j) => {
+                    if (j <= i) return; // count each pair once
                     const s2 = timeToMins(ee.startTime);
                     const e2 = timeToMins(ee.endTime);
-                    return s1 < e2 && e1 > s2;
+                    if (s1 < e2 && e1 > s2) totalOverlaps++;
                 });
-
-                if (hasOverlap) computedTotalConflicts++;
             });
         });
     });
-    // Divide by 2 because each pair of overlapping sessions was counted twice (e1 overlaps e2 AND e2 overlaps e1)
-    // Actually, let's just count unique 'slots' or just use the number of clashing entries.
-    const totalOverlaps = Math.ceil(computedTotalConflicts / 2);
-    const facultiesWithOverlaps = facultySchedules.filter(fs => {
-        // Find if this faculty has any entries with time overlaps
+
+    const facultiesWithConflicts = facultySchedules.filter(fs => {
         const dayRows = {};
         fs.entries.forEach(e => {
             if (!dayRows[e.day]) dayRows[e.day] = [];
@@ -120,7 +115,9 @@ export default function FacultyOverview() {
             dayEntries.some((e, i) => {
                 const s1 = timeToMins(e.startTime);
                 const e1 = timeToMins(e.endTime);
-                return dayEntries.some((ee, j) => i !== j && s1 < timeToMins(ee.endTime) && e1 > timeToMins(ee.startTime));
+                if (!s1 || !e1) return false;
+                return dayEntries.some((ee, j) => j !== i &&
+                    s1 < timeToMins(ee.endTime) && e1 > timeToMins(ee.startTime));
             })
         );
     });
@@ -201,25 +198,33 @@ export default function FacultyOverview() {
 
             {/* Summary Strip */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-                <div style={summaryCard('#10b981', '#d1fae5')}>
+                <div style={summaryCard('var(--primary-color)', 'var(--primary-50)', 'var(--primary-200)')}>
                     <div style={{ fontSize: 26, fontWeight: 700 }}>{facultySchedules.length}</div>
                     <div style={{ fontSize: 12, opacity: 0.8 }}>Total Faculty</div>
                 </div>
-                <div style={summaryCard(totalOverlaps > 0 ? '#ef4444' : '#10b981', totalOverlaps > 0 ? '#fee2e2' : '#d1fae5')}>
+                <div style={summaryCard(totalOverlaps > 0 ? '#b91c1c' : 'var(--primary-color)', totalOverlaps > 0 ? '#fff0f0' : 'var(--primary-50)', totalOverlaps > 0 ? '#fca5a5' : 'var(--primary-200)')}>
                     <div style={{ fontSize: 26, fontWeight: 700 }}>{totalOverlaps}</div>
-                    <div style={{ fontSize: 12, opacity: 0.8 }}>Total Overlaps</div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>Scheduling Conflicts</div>
                 </div>
+                {facultiesWithConflicts.length > 0 && (
+                    <div style={summaryCard('var(--navy)', 'var(--gold-l)', 'var(--gold)')}>
+                        <div style={{ fontSize: 26, fontWeight: 700 }}>{facultiesWithConflicts.length}</div>
+                        <div style={{ fontSize: 12, opacity: 0.8 }}>Faculty Affected</div>
+                    </div>
+                )}
             </div>
 
             {/* Legend + Search */}
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
                 {[
-                    { color: 'rgba(139,92,246,0.85)', label: 'Theory session' },
-                    { color: 'rgba(6,182,212,0.85)', label: 'Lab session' },
+                    { color: 'rgba(139,92,246,0.85)', label: 'Theory (current dept)' },
+                    { color: 'rgba(6,182,212,0.85)', label: 'Lab (current dept)' },
+                    { color: 'rgba(245,158,11,0.85)', label: 'Theory (other dept — read-only)' },
+                    { color: 'rgba(251,191,36,0.85)', label: 'Lab (other dept — read-only)' },
                     { color: 'rgba(239,68,68,0.90)', label: 'Conflict / Double-booked' },
-                ].map(({ color, label, border }) => (
+                ].map(({ color, label }) => (
                     <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ width: 16, height: 16, borderRadius: 3, background: color, border: border || '1px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
+                        <div style={{ width: 16, height: 16, borderRadius: 3, background: color, border: '1px solid rgba(255,255,255,0.2)', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
                     </div>
                 ))}
@@ -254,6 +259,7 @@ export default function FacultyOverview() {
                     ROW_HEIGHT={ROW_HEIGHT}
                     RULER_HEIGHT={RULER_HEIGHT}
                     DAY_LABEL_WIDTH={DAY_LABEL_WIDTH}
+                    user={user}
                 />
             ))}
         </div>
@@ -266,7 +272,8 @@ export default function FacultyOverview() {
 function FacultyGanttCard({
     fs, ticks, minMins, totalDuration, toPct, widthPct,
     setTooltip, onResolve,
-    ROW_HEIGHT, RULER_HEIGHT, DAY_LABEL_WIDTH
+    ROW_HEIGHT, RULER_HEIGHT, DAY_LABEL_WIDTH,
+    user
 }) {
     // Re-detect conflicts for this faculty card specifically
     const dayRows = {};
@@ -275,18 +282,22 @@ function FacultyGanttCard({
         dayRows[e.day].push(e);
     });
 
+    // Recount conflicts for this faculty card as unique PAIRS
     let conflictsCount = 0;
     Object.values(dayRows).forEach(de => {
         de.forEach((e, i) => {
             const s1 = timeToMins(e.startTime);
             const e1 = timeToMins(e.endTime);
             if (!s1 || !e1) return;
-            if (de.some((ee, j) => i !== j && s1 < timeToMins(ee.endTime) && e1 > timeToMins(ee.startTime))) {
-                conflictsCount++;
-            }
+            de.forEach((ee, j) => {
+                if (j <= i) return;
+                const s2 = timeToMins(ee.startTime);
+                const e2 = timeToMins(ee.endTime);
+                if (s1 < e2 && e1 > s2) conflictsCount++;
+            });
         });
     });
-    const finalCount = Math.ceil(conflictsCount / 2);
+    const finalCount = conflictsCount;
     const hasConflict = finalCount > 0;
 
     return (
@@ -313,8 +324,17 @@ function FacultyGanttCard({
                 }}>
                     {fs.facultyName.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>{fs.facultyName}</div>
+                <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: 15 }}>{fs.facultyName}</span>
+                        {fs.facultyDeptCode && (
+                            <span style={{
+                                fontSize: 10, fontWeight: 700,
+                                background: 'var(--gradient-primary)',
+                                color: '#fff', padding: '1px 7px', borderRadius: 99
+                            }}>{fs.facultyDeptCode}</span>
+                        )}
+                    </div>
                     <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                         {fs.entries.length} session{fs.entries.length !== 1 ? 's' : ''} scheduled
                         {hasConflict && (
@@ -438,6 +458,10 @@ function FacultyGanttCard({
                                             });
 
                                             const isConflict = !!e.isConflict || clashingSessions.length > 0;
+                                            const isCrossDept = e.fromCurrentTT === false;
+                                            // canResolve: only allow resolving entries that belong to the current dept timetable
+                                            const canResolve = isConflict && e.editable && !isCrossDept &&
+                                                (user?.role === 'admin' || user?.role === 'department_user');
 
                                             const left = toPct(e.startTime);
                                             const width = widthPct(e.startTime, e.endTime);
@@ -456,20 +480,28 @@ function FacultyGanttCard({
                                             const blockHeight = isStacked ? 22 : ROW_HEIGHT - 12;
                                             const stackOffset = sibIdx * 24;
 
+                                            // Color: conflict (red) > cross-dept (gray) > lab (gold) > theory (blue)
                                             const bg = isConflict
-                                                ? 'linear-gradient(135deg, #ef4444, #991b1b)'
-                                                : e.isLab
-                                                    ? 'linear-gradient(135deg, #0891b2, #0e7490)'
-                                                    : 'linear-gradient(135deg, #7c3aed, #5b21b6)';
+                                                ? '#d32f2f'
+                                                : isCrossDept
+                                                    ? '#90a4ae'
+                                                    : e.isLab
+                                                        ? 'var(--gold)'
+                                                        : 'var(--primary)';
 
                                             let tooltipText =
-                                                `${e.subjectName} (${e.subjectCode})\n` +
-                                                `Class: ${e.className}\n` +
+                                                `${isCrossDept ? '[' + (e.classDeptCode || 'OTHER DEPT') + '] ' : ''}${e.subjectName} (${e.subjectCode})\n` +
+                                                `Class: ${e.className}${e.classYear ? ' — Year ' + e.classYear : ''}\n` +
+                                                `Dept: ${e.classDeptName || '—'}\n` +
                                                 `Room: ${e.roomName || '—'}\n` +
                                                 `${e.startTime} – ${e.endTime}`;
 
+                                            if (isCrossDept) {
+                                                tooltipText += '\n\nRead-only (other department)';
+                                            }
+
                                             if (isConflict) {
-                                                tooltipText += '\n\n CONFLICT DETECTED';
+                                                tooltipText += '\n\nCONFLICT DETECTED';
                                                 if (e.conflictsWith && e.conflictsWith.length > 0) {
                                                     e.conflictsWith.forEach(c => {
                                                         tooltipText += `\n- ${c.facultyName} (${c.subjectName}): ${c.reason}`;
@@ -477,7 +509,9 @@ function FacultyGanttCard({
                                                 } else {
                                                     tooltipText += `\nOverlap with ${clashingSessions.length} other session(s)`;
                                                 }
-                                                tooltipText += '\n\n⚡ Click to Auto-Resolve';
+                                                if (canResolve) {
+                                                    tooltipText += '\n\nClick to Auto-Resolve';
+                                                }
                                             }
 
                                             return (
@@ -501,7 +535,7 @@ function FacultyGanttCard({
                                                         padding: '0 7px',
                                                         overflow: 'hidden',
                                                         zIndex: 5 + sibIdx,
-                                                        cursor: isConflict ? 'pointer' : 'default',
+                                                        cursor: canResolve ? 'pointer' : 'default',
                                                         boxSizing: 'border-box',
                                                         whiteSpace: 'nowrap'
                                                     }}
@@ -517,7 +551,7 @@ function FacultyGanttCard({
                                                         setTooltip(null);
                                                     }}
                                                     onClick={() => {
-                                                        if (isConflict) {
+                                                        if (canResolve) {
                                                             onResolve(e.originalIndex, e.subjectCode);
                                                         }
                                                     }}
@@ -526,15 +560,17 @@ function FacultyGanttCard({
                                                         fontSize: 11, fontWeight: 700,
                                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                                                         lineHeight: 1.2,
+                                                        color: isCrossDept ? '#1c1917' : '#fff'
                                                     }}>
-                                                        {isConflict && ' '}{e.subjectCode}
+                                                        {isConflict && '[!] '}{isCrossDept && '(L) '}{e.subjectCode}
                                                     </div>
                                                     <div style={{
                                                         fontSize: 9, opacity: 0.88,
                                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                                                         lineHeight: 1.2, marginTop: 1,
+                                                        color: isCrossDept ? '#292524' : undefined
                                                     }}>
-                                                        {e.className} • {e.roomName || '—'}
+                                                        {isCrossDept && (e.classDeptCode ? `[${e.classDeptCode}] ` : '')}{e.className} • {e.roomName || '—'}
                                                     </div>
                                                 </div>
                                             );
@@ -551,15 +587,16 @@ function FacultyGanttCard({
 }
 
 // Style helpers
-function summaryCard(color, bg) {
+function summaryCard(textColor, bgColor, borderColor) {
     return {
-        background: `linear-gradient(135deg, ${bg}, ${bg}aa)`,
-        border: `1px solid ${color}44`,
+        background: bgColor,
+        border: `1.5px solid ${borderColor}`,
         borderRadius: 'var(--radius-md)',
         padding: '10px 18px',
-        color: color,
-        minWidth: 80,
+        color: textColor,
+        minWidth: 100,
         textAlign: 'center',
         flexShrink: 0,
+        boxShadow: 'var(--shadow-sm)'
     };
 }

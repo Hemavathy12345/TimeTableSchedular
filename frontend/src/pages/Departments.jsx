@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import Modal from '../components/Modal';
 import { useToast, ToastContainer } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 
 export default function Departments() {
     const [departments, setDepartments] = useState([]);
@@ -10,6 +11,8 @@ export default function Departments() {
     const [form, setForm] = useState({ name: '', code: '' });
     const { toasts, addToast, removeToast } = useToast();
     const [selectedIds, setSelectedIds] = useState([]);
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
 
     useEffect(() => { load(); }, []);
 
@@ -74,10 +77,10 @@ export default function Departments() {
                     <p className="page-subtitle">Manage academic departments</p>
                 </div>
                 <div className="btn-group">
-                    {selectedIds.length > 0 && (
+                    {isAdmin && selectedIds.length > 0 && (
                         <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
                     )}
-                    <button className="btn btn-primary" onClick={openAdd}>+ Add Department</button>
+                    {isAdmin && <button className="btn btn-primary" onClick={openAdd}>+ Add Department</button>}
                 </div>
             </div>
 
@@ -85,32 +88,32 @@ export default function Departments() {
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th style={{ width: 40 }}>
+                            {isAdmin && <th style={{ width: 40 }}>
                                 <input type="checkbox" checked={departments.length > 0 && selectedIds.length === departments.length} onChange={toggleSelectAll} />
-                            </th>
+                            </th>}
                             <th>Name</th>
                             <th>Code</th>
-                            <th>Actions</th>
+                            {isAdmin && <th>Actions</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {departments.map(d => (
                             <tr key={d.id} className={selectedIds.includes(d.id) ? 'row-selected' : ''}>
-                                <td>
+                                {isAdmin && <td>
                                     <input type="checkbox" checked={selectedIds.includes(d.id)} onChange={() => toggleSelect(d.id)} />
-                                </td>
+                                </td>}
                                 <td style={{ fontWeight: 600 }}>{d.name}</td>
                                 <td><span className="badge badge-theory">{d.code}</span></td>
-                                <td>
+                                {isAdmin && <td>
                                     <div className="table-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(d)}>Edit</button>
                                         <button className="btn btn-danger btn-sm" onClick={() => remove(d.id)}>Delete</button>
                                     </div>
-                                </td>
+                                </td>}
                             </tr>
                         ))}
                         {departments.length === 0 && (
-                            <tr><td colSpan={4} className="empty-state">No departments yet</td></tr>
+                            <tr><td colSpan={isAdmin ? 4 : 2} className="empty-state">No departments yet</td></tr>
                         )}
                     </tbody>
                 </table>

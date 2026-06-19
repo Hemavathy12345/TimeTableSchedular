@@ -9,9 +9,24 @@ const router = Router();
 router.get('/', authenticateToken, async (req, res) => {
     try {
         const filter = {};
-        if (req.query.departmentId) filter.departmentId = req.query.departmentId;
+        if (req.query.departmentId && req.query.departmentId !== 'null' && req.query.departmentId !== 'undefined') {
+            filter.departmentId = req.query.departmentId;
+        } else if (req.user.role === 'department_user' && req.user.departmentId && req.query.all !== 'true') {
+            filter.departmentId = req.user.departmentId;
+        }
         const faculty = await Faculty.find(filter).lean();
-        res.json(faculty);
+        const departments = await Department.find().lean();
+
+        const enriched = faculty.map(f => {
+            const dept = departments.find(d => d.id === f.departmentId);
+            return {
+                ...f,
+                departmentName: dept ? dept.name : null,
+                departmentCode: dept ? dept.code : null
+            };
+        });
+
+        res.json(enriched);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -29,15 +44,27 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // POST /api/faculty
-router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
         const { name, departmentId, email, designation } = req.body;
-        if (!name || !departmentId) return res.status(400).json({ error: 'Name and departmentId required' });
+        if (!name) return res.status(400).json({ error: 'Name is required' });
+
+        let targetDeptId = departmentId;
+        if (req.user.role === 'department_user') {
+            if (departmentId && departmentId !== req.user.departmentId) {
+                return res.status(403).json({ error: 'Access denied. Cannot create faculty for another department.' });
+            }
+            targetDeptId = req.user.departmentId;
+        }
+
+        if (!targetDeptId) {
+            return res.status(400).json({ error: 'Department ID is required' });
+        }
 
         const fac = await Faculty.create({
             id: `fac-${uuidv4().slice(0, 8)}`,
             name,
-            departmentId,
+            departmentId: targetDeptId,
             email: email || '',
             designation: designation || ''
         });
@@ -48,14 +75,23 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
 });
 
 // PUT /api/faculty/:id
-router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+router.put('/:id', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
+        const query = { id: req.params.id };
+        if (req.user.role === 'department_user') {
+            query.departmentId = req.user.departmentId;
+            // Prevent department modification if they try to change it
+            if (req.body.departmentId && req.body.departmentId !== req.user.departmentId) {
+                return res.status(400).json({ error: 'Cannot change faculty department to another department.' });
+            }
+        }
+
         const fac = await Faculty.findOneAndUpdate(
-            { id: req.params.id },
+            query,
             { $set: req.body },
             { new: true, lean: true }
         );
-        if (!fac) return res.status(404).json({ error: 'Faculty not found' });
+        if (!fac) return res.status(404).json({ error: 'Faculty not found or access denied' });
         res.json(fac);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -63,10 +99,15 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
 });
 
 // DELETE /api/faculty/:id
-router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+router.delete('/:id', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
-        const result = await Faculty.deleteOne({ id: req.params.id });
-        if (result.deletedCount === 0) return res.status(404).json({ error: 'Faculty not found' });
+        const query = { id: req.params.id };
+        if (req.user.role === 'department_user') {
+            query.departmentId = req.user.departmentId;
+        }
+
+        const result = await Faculty.deleteOne(query);
+        if (result.deletedCount === 0) return res.status(404).json({ error: 'Faculty not found or access denied' });
         res.json({ message: 'Faculty deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -74,7 +115,7 @@ router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) 
 });
 
 // POST /api/faculty/import-excel
-router.post('/import-excel', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/import-excel', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
         const { data } = req.body;
         if (!Array.isArray(data) || data.length === 0) {
@@ -86,23 +127,34 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
         for (let i = 0; i < data.length; i++) {
             const record = data[i];
 
-            if (!record.name || !record.departmentId) {
+            if (!record.name) {
                 results.failed++;
-                results.errors.push(`Row ${i + 1}: Missing name or departmentId`);
+                results.errors.push(`Row ${i + 1}: Missing name`);
                 continue;
             }
 
-            const deptExists = await Department.findOne({ id: record.departmentId }).lean();
+            let targetDeptId = record.departmentId || record.department || record.DepartmentId;
+            if (req.user.role === 'department_user') {
+                targetDeptId = req.user.departmentId;
+            }
+
+            if (!targetDeptId) {
+                results.failed++;
+                results.errors.push(`Row ${i + 1}: Missing departmentId`);
+                continue;
+            }
+
+            const deptExists = await Department.findOne({ id: targetDeptId }).lean();
             if (!deptExists) {
                 results.failed++;
-                results.errors.push(`Row ${i + 1}: Department ID ${record.departmentId} not found`);
+                results.errors.push(`Row ${i + 1}: Department ID ${targetDeptId} not found`);
                 continue;
             }
 
             await Faculty.create({
                 id: `fac-${uuidv4().slice(0, 8)}`,
                 name: record.name,
-                departmentId: record.departmentId,
+                departmentId: targetDeptId,
                 email: record.email || '',
                 designation: record.designation || ''
             });
@@ -116,11 +168,17 @@ router.post('/import-excel', authenticateToken, requireRole('admin'), async (req
 });
 
 // POST /api/faculty/bulk-delete
-router.post('/bulk-delete', authenticateToken, requireRole('admin'), async (req, res) => {
+router.post('/bulk-delete', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No IDs provided' });
-        const result = await Faculty.deleteMany({ id: { $in: ids } });
+        
+        const query = { id: { $in: ids } };
+        if (req.user.role === 'department_user') {
+            query.departmentId = req.user.departmentId;
+        }
+
+        const result = await Faculty.deleteMany(query);
         res.json({ message: `${result.deletedCount} faculty deleted` });
     } catch (err) {
         res.status(500).json({ error: err.message });

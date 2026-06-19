@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { useToast, ToastContainer } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 
 export default function TimeSlots() {
     const [configs, setConfigs] = useState([]);
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
     const [selectedYear, setSelectedYear] = useState(1);
     const [editingConfig, setEditingConfig] = useState(null);
     const { toasts, addToast, removeToast } = useToast();
@@ -94,9 +97,11 @@ export default function TimeSlots() {
                     <h1 className="page-title">Time Slot Configuration</h1>
                     <p className="page-subtitle">Configure staggered timings and working days for each year level</p>
                 </div>
-                <div className="btn-group">
-                    <button className="btn btn-primary" onClick={save}>Save Configuration</button>
-                </div>
+                {isAdmin && (
+                    <div className="btn-group">
+                        <button className="btn btn-primary" onClick={save}>Save Configuration</button>
+                    </div>
+                )}
             </div>
 
             <div className="view-toggle" style={{ marginBottom: 24, width: 'fit-content' }}>
@@ -119,7 +124,7 @@ export default function TimeSlots() {
                     <div className="card">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                             <h2 style={{ fontSize: 18, fontWeight: 600 }}>Year {selectedYear} Periods</h2>
-                            <button className="btn btn-secondary btn-sm" onClick={addSlot}>+ Add Slot</button>
+                            {isAdmin && <button className="btn btn-secondary btn-sm" onClick={addSlot}>+ Add Slot</button>}
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -141,6 +146,7 @@ export default function TimeSlots() {
                                         style={{ width: 120 }}
                                         value={slot.start}
                                         onChange={e => updateSlot(idx, 'start', e.target.value)}
+                                        disabled={!isAdmin}
                                     />
                                     <span style={{ color: 'var(--text-muted)' }}>to</span>
                                     <input
@@ -149,26 +155,28 @@ export default function TimeSlots() {
                                         style={{ width: 120 }}
                                         value={slot.end}
                                         onChange={e => updateSlot(idx, 'end', e.target.value)}
+                                        disabled={!isAdmin}
                                     />
                                     <select
                                         className="form-select"
                                         style={{ width: 120 }}
                                         value={slot.type}
                                         onChange={e => updateSlot(idx, 'type', e.target.value)}
+                                        disabled={!isAdmin}
                                     >
                                         <option value="class">Class</option>
                                         <option value="break">Break</option>
                                         <option value="lunch">Lunch</option>
                                         <option value="activity">Activity Hour</option>
                                     </select>
-                                    <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeSlot(idx)}>×</button>
+                                    {isAdmin && <button className="btn btn-danger btn-sm btn-icon" onClick={() => removeSlot(idx)}>×</button>}
                                 </div>
                             ))}
                         </div>
 
                         {editingConfig.slots.length === 0 && (
                             <div className="empty-state">
-                                <p>No slots configured. Click "Add Slot" to start.</p>
+                                <p>No slots configured.{isAdmin && ' Click "Add Slot" to start.'}</p>
                             </div>
                         )}
                     </div>

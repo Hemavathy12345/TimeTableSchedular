@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import Modal from '../components/Modal';
 import { useToast, ToastContainer } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 
 export default function Rooms() {
     const [rooms, setRooms] = useState([]);
@@ -12,6 +13,9 @@ export default function Rooms() {
     const [typeFilter, setTypeFilter] = useState('');
     const { toasts, addToast, removeToast } = useToast();
     const [selectedIds, setSelectedIds] = useState([]);
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
+    const canEdit = user?.role === 'admin' || user?.role === 'department_user';
 
     useEffect(() => { load(); }, []);
 
@@ -69,7 +73,7 @@ export default function Rooms() {
                     <p className="page-subtitle">Manage classrooms and laboratory spaces</p>
                 </div>
                 <div className="btn-group">
-                    {selectedIds.length > 0 && (
+                    {canEdit && selectedIds.length > 0 && (
                         <button className="btn btn-danger" onClick={handleBulkDelete}>Delete Selected ({selectedIds.length})</button>
                     )}
                     <select className="form-select" style={{ width: 140 }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
@@ -77,38 +81,38 @@ export default function Rooms() {
                         <option value="classroom">Classrooms</option>
                         <option value="lab">Labs</option>
                     </select>
-                    <button className="btn btn-primary" onClick={openAdd}>+ Add Room</button>
+                    {canEdit && <button className="btn btn-primary" onClick={openAdd}>+ Add Room</button>}
                 </div>
             </div>
             <div className="data-table-wrapper">
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th style={{ width: 40 }}>
+                            {canEdit && <th style={{ width: 40 }}>
                                 <input type="checkbox" checked={filtered.length > 0 && selectedIds.length === filtered.length} onChange={() => toggleSelectAll(filtered)} />
-                            </th>
-                            <th>Name</th><th>Type</th><th>Capacity</th><th>Department</th><th>Actions</th>
+                            </th>}
+                            <th>Name</th><th>Type</th><th>Capacity</th><th>Department</th>{canEdit && <th>Actions</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {filtered.map(r => (
                             <tr key={r.id} className={selectedIds.includes(r.id) ? 'row-selected' : ''}>
-                                <td>
+                                {canEdit && <td>
                                     <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleSelect(r.id)} />
-                                </td>
+                                </td>}
                                 <td style={{ fontWeight: 600 }}>{r.name}</td>
                                 <td><span className={`badge ${r.type === 'lab' ? 'badge-lab' : 'badge-classroom'}`}>{r.type}</span></td>
                                 <td>{r.capacity}</td>
                                 <td>{deptName(r.departmentId)}</td>
-                                <td>
+                                {canEdit && <td>
                                     <div className="table-actions">
                                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>Edit</button>
                                         <button className="btn btn-danger btn-sm" onClick={() => remove(r.id)}>Delete</button>
                                     </div>
-                                </td>
+                                </td>}
                             </tr>
                         ))}
-                        {filtered.length === 0 && <tr><td colSpan={6} className="empty-state">No rooms found</td></tr>}
+                        {filtered.length === 0 && <tr><td colSpan={canEdit ? 6 : 4} className="empty-state">No rooms found</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -132,12 +136,14 @@ export default function Rooms() {
                         <label className="form-label">Capacity</label>
                         <input className="form-input" type="number" value={form.capacity} onChange={e => setForm({ ...form, capacity: parseInt(e.target.value) })} />
                     </div>
-                    <div className="form-group">
-                        <label className="form-label">Department</label>
-                        <select className="form-select" value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })}>
-                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
-                    </div>
+                    {isAdmin && (
+                        <div className="form-group">
+                            <label className="form-label">Department</label>
+                            <select className="form-select" value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })}>
+                                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                    )}
                 </div>
             </Modal>
         </div>

@@ -8,7 +8,8 @@ const router = Router();
 // GET /api/departments
 router.get('/', authenticateToken, async (req, res) => {
     try {
-        const departments = await Department.find().lean();
+        const filter = {};
+        const departments = await Department.find(filter).lean();
         res.json(departments);
     } catch (err) {
         res.status(500).json({ error: err.message });

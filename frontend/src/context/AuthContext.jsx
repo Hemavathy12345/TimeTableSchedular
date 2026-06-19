@@ -4,16 +4,57 @@ import api from '../utils/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState({ id: 'admin-001', name: 'Admin', role: 'admin' });
-    const [loading, setLoading] = useState(false);
+    const [user, setUser] = useState(() => {
+        const cached = localStorage.getItem('user');
+        try {
+            return cached ? JSON.parse(cached) : null;
+        } catch (e) {
+            return null;
+        }
+    });
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // No longer needed
+        const initializeAuth = async () => {
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    const res = await api.get('/auth/me');
+                    setUser(res.data);
+                    localStorage.setItem('user', JSON.stringify(res.data));
+                } catch (err) {
+                    console.error('Session validation failed:', err);
+                    logout();
+                }
+            } else {
+                setUser(null);
+            }
+            setLoading(false);
+        };
+        initializeAuth();
     }, []);
 
+    const login = async (username, password) => {
+        setLoading(true);
+        try {
+            const res = await api.post('/auth/login', { username, password });
+            const { token, user: loggedUser } = res.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(loggedUser));
+            setUser(loggedUser);
+            return loggedUser;
+        } catch (err) {
+            throw err;
+        } finally {
+            setLoading(false);
+        }
+    };
 
-    const login = async () => {};
-    const logout = () => {};
+    const logout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+    };
 
     return (
         <AuthContext.Provider value={{ user, login, logout, loading }}>
@@ -21,7 +62,6 @@ export function AuthProvider({ children }) {
         </AuthContext.Provider>
     );
 }
-
 
 export function useAuth() {
     const context = useContext(AuthContext);

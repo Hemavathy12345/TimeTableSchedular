@@ -35,6 +35,9 @@ const timetableSchema = new mongoose.Schema({
     name: { type: String, required: true },
     description: { type: String, default: '' },
     generatedAt: { type: String },
+    isPublished: { type: Boolean, default: false },
+    isLocked: { type: Boolean, default: false },
+    departmentId: { type: String, default: null },
     entries: [timetableEntrySchema],
     conflicts: [conflictSchema]
 }, { timestamps: true });

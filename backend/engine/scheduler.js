@@ -61,12 +61,18 @@ function occupyBlock(maps, day, slotIndex, duration, ids, config) {
     const startM = timeStrMins(startTimeStr);
     const endM = timeStrMins(endTimeStr);
 
+    // Deduplicate faculty IDs assigned to this block
+    const uniqueFaculties = [...new Set([ids.facultyId, ids.labFaculty2Id, ids.labFaculty3Id].filter(Boolean))];
+
     for (let i = 0; i < duration; i++) {
         const k = slotKey(day, slotIndex + i);
         if (ids.classId) occupy(maps.class, k, ids.classId);
-        if (ids.facultyId && startM > 0) occupyTime(maps.faculty, day, ids.facultyId, startM, endM, ids.subjectId);
-        if (ids.labFaculty2Id && startM > 0) occupyTime(maps.faculty, day, ids.labFaculty2Id, startM, endM, ids.subjectId);
-        if (ids.labFaculty3Id && startM > 0) occupyTime(maps.faculty, day, ids.labFaculty3Id, startM, endM, ids.subjectId);
+        
+        if (startM > 0) {
+            uniqueFaculties.forEach(facId => {
+                occupyTime(maps.faculty, day, facId, startM, endM, ids.subjectId);
+            });
+        }
         if (ids.roomId && startM > 0) occupyTime(maps.room, day, ids.roomId, startM, endM);
     }
 }
@@ -78,12 +84,18 @@ function releaseBlock(maps, day, slotIndex, duration, ids, config) {
     const startM = timeStrMins(startTimeStr);
     const endM = timeStrMins(endTimeStr);
 
+    // Deduplicate faculty IDs assigned to this block
+    const uniqueFaculties = [...new Set([ids.facultyId, ids.labFaculty2Id, ids.labFaculty3Id].filter(Boolean))];
+
     for (let i = 0; i < duration; i++) {
         const k = slotKey(day, slotIndex + i);
         if (ids.classId) release(maps.class, k, ids.classId);
-        if (ids.facultyId && startM > 0) releaseTime(maps.faculty, day, ids.facultyId, startM, endM);
-        if (ids.labFaculty2Id && startM > 0) releaseTime(maps.faculty, day, ids.labFaculty2Id, startM, endM);
-        if (ids.labFaculty3Id && startM > 0) releaseTime(maps.faculty, day, ids.labFaculty3Id, startM, endM);
+        
+        if (startM > 0) {
+            uniqueFaculties.forEach(facId => {
+                releaseTime(maps.faculty, day, facId, startM, endM);
+            });
+        }
         if (ids.roomId && startM > 0) releaseTime(maps.room, day, ids.roomId, startM, endM);
     }
 }
@@ -223,6 +235,24 @@ export function generateTimetable(data) {
     const conflicts = [];
     const maps      = { faculty: {}, room: {}, class: {} };
 
+    // --- Phase -1: Occupy existing reservations (Continuation / Incremental Mode) ---
+    if (data.existingReservations && data.existingReservations.length > 0) {
+        for (const resv of data.existingReservations) {
+            const cfg = configByYear[Number(resv.year)] || timeSlotConfigs[0] || null;
+            if (!cfg) continue;
+
+            const duration = resv.duration || 1;
+            const sIdx = resv.slotIndex !== undefined ? resv.slotIndex : resv.slot;
+            occupyBlock(maps, resv.day, sIdx, duration, {
+                facultyId: resv.facultyId || resv.faculty,
+                labFaculty2Id: resv.labFaculty2Id,
+                labFaculty3Id: resv.labFaculty3Id,
+                roomId: resv.roomId || resv.room || resv.lab,
+                subjectId: resv.subjectId
+            }, cfg);
+        }
+    }
+
     // --- Phase 0: COE (Centre of Excellence) hard-constraint reservation ----
     // COE entries are year-based: one entry blocks the same slots for EVERY
     // class of that year. Slots are pre-filled BEFORE any other subject so
@@ -231,7 +261,8 @@ export function generateTimetable(data) {
         // Find all classes that belong to this year & section
         const yearClasses = classes.filter(c => {
             const matchesYear = Number(c.year) === Number(coe.year);
-            const matchesSection = !coe.section || coe.section === 'All' || c.section === coe.section;
+            const sects = coe.sections && coe.sections.length > 0 ? coe.sections : [coe.section || 'All'];
+            const matchesSection = sects.includes('All') || sects.includes(c.section);
             return matchesYear && matchesSection;
         });
         if (yearClasses.length === 0) continue;
@@ -1344,6 +1375,59 @@ export function validateSwap(entries, entryIndex1, entryIndex2, data) {
     return { valid: true };
 }
 
+export function validateMove(entries, entryIndex, targetDay, targetSlotIndex, data) {
+    const e = entries[entryIndex];
+    if (!e) return { valid: false, reason: 'Invalid entry index' };
+    if (e.isFixed) return { valid: false, reason: 'Cannot move fixed slots' };
+
+    const classId = e.classId;
+    const duration = e.duration || 1;
+
+    // Clone entries to simulate the move
+    const cloned = JSON.parse(JSON.stringify(entries));
+
+    // Find all entries of the same class at the source day/slot window
+    const sourceDay = e.day;
+    const sourceSlot = e.slotIndex;
+    
+    const movingIndices = [];
+    entries.forEach((entry, idx) => {
+        if (entry.classId === classId && entry.day === sourceDay &&
+            entry.slotIndex < sourceSlot + duration && entry.slotIndex + (entry.duration || 1) > sourceSlot) {
+            movingIndices.push(idx);
+        }
+    });
+
+    // Check if target slots are free for this class (ignoring moving entries)
+    const targetOccupied = entries.some((entry, idx) => {
+        if (movingIndices.includes(idx)) return false;
+        if (entry.classId !== classId) return false;
+        if (entry.day !== targetDay) return false;
+        
+        const entryDur = entry.duration || 1;
+        return (entry.slotIndex < targetSlotIndex + duration && entry.slotIndex + entryDur > targetSlotIndex);
+    });
+
+    if (targetOccupied) {
+        return { valid: false, reason: 'Target slots are not free for this class' };
+    }
+
+    // Apply the move
+    movingIndices.forEach(idx => {
+        cloned[idx].day = targetDay;
+        cloned[idx].slotIndex = cloned[idx].slotIndex - sourceSlot + targetSlotIndex;
+    });
+
+    const originalViolations = checkConstraints(entries, data);
+    const clonedViolations   = checkConstraints(cloned, data);
+    const newViolations       = clonedViolations.filter(v => !originalViolations.includes(v));
+
+    if (newViolations.length > 0) {
+        return { valid: false, reason: 'Move creates conflicts', violations: newViolations };
+    }
+    return { valid: true };
+}
+
 export function checkConstraints(entries, data) {
     const { subjects, rooms, faculty, classes, configs } = data;
     const violations  = [];
@@ -1419,17 +1503,20 @@ export function checkConstraints(entries, data) {
 
         // Try to get clock times for this entry
         const cls = classes ? classes.find(c => c.id === e.classId) : null;
-        const config = (configs && cls) ? configs.find(c => Number(c.year) === Number(cls.year)) : null;
+        const config = (configs && cls) ? configs.find(c => Number(c.year) === Number(cls.year)) || configs[0] : (configs ? configs[0] : null);
+        const uniqueFacs = [...new Set([e.facultyId, e.labFaculty2Id, e.labFaculty3Id].filter(Boolean))];
 
         if (config && config.slots) {
-            const startSlot = config.slots[e.slotIndex];
-            const endSlot = config.slots[e.slotIndex + duration - 1];
+            const rawSlots = config.slots?.toObject ? config.slots.toObject() : config.slots;
+            const startSlot = rawSlots[e.slotIndex];
+            const endSlot = rawSlots[e.slotIndex + duration - 1];
             if (startSlot && endSlot) {
                 const sM = timeStrMins(startSlot.start);
                 const eM = timeStrMins(endSlot.end);
 
-                checkOverlap(facultyReg, e.day, e.facultyId, sM, eM, 'Faculty', null, e.subjectId);
-                if (e.labFaculty2Id) checkOverlap(facultyReg, e.day, e.labFaculty2Id, sM, eM, 'Faculty', null, e.subjectId);
+                uniqueFacs.forEach(facId => {
+                    checkOverlap(facultyReg, e.day, facId, sM, eM, 'Faculty', null, e.subjectId);
+                });
                 checkOverlap(classReg, e.day, e.classId, sM, eM, 'Class', cls?.name, e.subjectId);
                 checkOverlap(roomReg, e.day, e.roomId, sM, eM, 'Room', null, e.subjectId);
             }
@@ -1437,31 +1524,27 @@ export function checkConstraints(entries, data) {
             // Fallback to slotIndex check if config is missing
             for (let i = 0; i < duration; i++) {
                 const k = e.day + '-' + (e.slotIndex + i);
-                if (e.facultyId) {
-                    const fk = e.facultyId + '-' + k;
+                
+                uniqueFacs.forEach(facId => {
+                    const fk = facId + '-' + k;
                     if (facultyReg[fk]) {
                         if (facultyReg[fk] !== e.subjectId) {
-                            violations.push(`Faculty ${e.facultyId} teaching different subjects consecutively (slots ${k})`);
+                            violations.push(`Faculty ${facId} teaching different subjects consecutively (slots ${k})`);
                         } else {
-                             violations.push('Faculty ' + e.facultyId + ' double-booked at ' + k);
+                            violations.push('Faculty ' + facId + ' double-booked at ' + k);
                         }
                     }
                     facultyReg[fk] = e.subjectId;
                     
                     // Also check adjacency in slot indices
                     const prevK = e.day + '-' + (e.slotIndex + i - 1);
-                    const nextK = e.day + '-' + (e.slotIndex + i + 1);
-                    if (facultyReg[e.facultyId + '-' + prevK] && facultyReg[e.facultyId + '-' + prevK] !== e.subjectId) {
-                        violations.push(`Faculty ${e.facultyId} teaching different subjects consecutively at ${prevK} and ${k}`);
+                    if (facultyReg[facId + '-' + prevK] && facultyReg[facId + '-' + prevK] !== e.subjectId) {
+                        violations.push(`Faculty ${facId} teaching different subjects consecutively at ${prevK} and ${k}`);
                     }
-                }
-                if (e.labFaculty2Id) {
-                    const f2k = e.labFaculty2Id + '-' + k;
-                    if (facultyReg[f2k]) violations.push('Lab faculty ' + e.labFaculty2Id + ' double-booked at ' + k);
-                    facultyReg[f2k] = true;
-                }
+                });
+
                 const ck = e.classId + '-' + k;
-                if (classReg[ck]) violations.push('Class ' + (cls?.name || e.classId) + ' double-booked at ' + k);
+                if (classReg[ck]) violations.push('Class ' + (cls ? cls.name : e.classId) + ' double-booked at ' + k);
                 classReg[ck] = true;
                 if (e.roomId) {
                     const rk = e.roomId + '-' + k;
@@ -1526,10 +1609,28 @@ export function buildAllocationSummary(entries, subjects, mappings, classes) {
     for (const cls of classes) {
         const classMappings = mappings.filter(m => m.classId === cls.id);
         
+        // Deduplicate: if two mappings resolve to subjects with the same code+type,
+        // prefer the one whose departmentId matches the class's own department.
+        const seen = new Map(); // key: `${code}|${type}` → { mapping, subject }
+
         for (const mapping of classMappings) {
             const subject = subjects.find(s => s.id === mapping.subjectId);
             if (!subject) continue;
+            const key = `${subject.code}|${subject.type}`;
+            if (!seen.has(key)) {
+                seen.set(key, { mapping, subject });
+            } else {
+                const existing = seen.get(key);
+                // Prefer the subject that belongs to the class's own department
+                const existingMatchesDept = existing.subject.departmentId === cls.departmentId;
+                const newMatchesDept = subject.departmentId === cls.departmentId;
+                if (newMatchesDept && !existingMatchesDept) {
+                    seen.set(key, { mapping, subject });
+                }
+            }
+        }
 
+        for (const { mapping, subject } of seen.values()) {
             const classSubjectEntries = entries.filter(e => e.classId === cls.id && e.subjectId === subject.id);
             const allocatedPeriods = classSubjectEntries.reduce((sum, e) => sum + (e.duration || 1), 0);
             const required = periodsPerWeek(subject);
