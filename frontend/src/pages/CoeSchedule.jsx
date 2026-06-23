@@ -27,26 +27,29 @@ export default function CoeSchedule() {
     const [sections, setSections]     = useState([]);
     const [showModal, setShowModal]   = useState(false);
     const [editing, setEditing]       = useState(null);
+    const [departments, setDepartments] = useState([]);
     const [filterYear, setFilterYear] = useState('');
     const { toasts, addToast, removeToast } = useToast();
 
-    const defaultForm = { year: 1, label: 'COE', day: 'Monday', startSlotIndex: 0, endSlotIndex: 0, coFacultyId: '', sections: ['All'] };
+    const defaultForm = { year: 1, label: 'COE', day: 'Monday', startSlotIndex: 0, endSlotIndex: 0, coFacultyId: '', sections: ['All'], departments: ['All'] };
     const [form, setForm] = useState(defaultForm);
 
     useEffect(() => { load(); }, []);
 
     const load = async () => {
-        const [coe, cfg, fac, cls] = await Promise.all([
+        const [coe, cfg, fac, cls, dept] = await Promise.all([
             api.get('/coe'),
             api.get('/timeslots'),
             api.get('/faculty?all=true'),
-            api.get('/classes?all=true')
+            api.get('/classes?all=true'),
+            api.get('/departments')
         ]);
         setCoeEntries(coe.data);
         setConfigs(cfg.data);
         setFaculties(fac.data);
         const uniqueSects = [...new Set(cls.data.map(c => c.section).filter(Boolean))].sort();
         setSections(uniqueSects);
+        setDepartments(dept.data);
     };
 
     const getSlotsForYear = (year) => {
@@ -77,7 +80,8 @@ export default function CoeSchedule() {
             startSlotIndex: entry.startSlotIndex,
             endSlotIndex:   entry.endSlotIndex,
             coFacultyId:    entry.coFacultyId || '',
-            sections:       entry.sections && entry.sections.length > 0 ? entry.sections : [entry.section || 'All']
+            sections:       entry.sections && entry.sections.length > 0 ? entry.sections : [entry.section || 'All'],
+            departments:    entry.departments && entry.departments.length > 0 ? entry.departments : ['All']
         });
         setShowModal(true);
     };
@@ -90,6 +94,9 @@ export default function CoeSchedule() {
         if (!form.sections || form.sections.length === 0) {
             addToast('At least one section must be selected', 'error'); return;
         }
+        if (!form.departments || form.departments.length === 0) {
+            addToast('At least one department must be selected', 'error'); return;
+        }
         try {
             const payload = {
                 year:           Number(form.year),
@@ -98,7 +105,8 @@ export default function CoeSchedule() {
                 startSlotIndex: Number(form.startSlotIndex),
                 endSlotIndex:   Number(form.endSlotIndex),
                 coFacultyId:    form.coFacultyId || null,
-                sections:       form.sections
+                sections:       form.sections,
+                departments:    form.departments
             };
             if (editing) {
                 await api.put(`/coe/${editing.id}`, payload);
@@ -169,6 +177,7 @@ export default function CoeSchedule() {
                     <thead>
                         <tr>
                             <th>Year</th>
+                            <th>Department</th>
                             <th>Section</th>
                             <th>Label</th>
                             <th>Day</th>
@@ -194,6 +203,32 @@ export default function CoeSchedule() {
                                     }}>
                                         Year {entry.year}
                                     </span>
+                                </td>
+                                <td>
+                                    {(() => {
+                                        const entryDepts = entry.departments && entry.departments.length > 0 ? entry.departments : ['All'];
+                                        const isAll = entryDepts.includes('All');
+                                        if (isAll) {
+                                            return <span className="badge badge-success">All</span>;
+                                        }
+                                        const deptCodes = entryDepts.map(dId => {
+                                            const d = departments.find(dept => dept.id === dId);
+                                            return d ? (d.code || d.name) : dId;
+                                        });
+                                        return (
+                                            <span style={{
+                                                background: 'var(--primary-50)',
+                                                color: 'var(--primary-color)',
+                                                border: '1px solid var(--primary-200)',
+                                                borderRadius: 6,
+                                                padding: '3px 10px',
+                                                fontSize: 12,
+                                                fontWeight: 700
+                                            }}>
+                                                {deptCodes.join(', ')}
+                                            </span>
+                                        );
+                                    })()}
                                 </td>
                                 <td>
                                     {(() => {
@@ -258,7 +293,7 @@ export default function CoeSchedule() {
                         ))}
                         {filtered.length === 0 && (
                             <tr>
-                                <td colSpan={canEdit ? 9 : 8} className="empty-state">
+                                <td colSpan={canEdit ? 10 : 9} className="empty-state">
                                     {filterYear
                                         ? `No COE blocks defined for Year ${filterYear}.`
                                         : isAdmin 
@@ -306,10 +341,16 @@ export default function CoeSchedule() {
                                                 <div style={{ fontWeight: 600, color: COE.text }}>
                                                     {(() => {
                                                         const entrySections = e.sections && e.sections.length > 0 ? e.sections : [e.section || 'All'];
-                                                        const isAll = entrySections.includes('All');
+                                                        const isAllSec = entrySections.includes('All');
+                                                        const entryDepts = e.departments && e.departments.length > 0 ? e.departments : ['All'];
+                                                        const isAllDept = entryDepts.includes('All');
+                                                        const deptCodes = isAllDept ? 'All Depts' : entryDepts.map(dId => {
+                                                            const d = departments.find(dept => dept.id === dId);
+                                                            return d ? (d.code || d.name) : dId;
+                                                        }).join(', ');
                                                         return (
                                                             <>
-                                                                {e.label} {!isAll ? `(Sec ${entrySections.join(', ')})` : '(All Sections)'}
+                                                                {e.label} ({deptCodes} • {!isAllSec ? `Sec ${entrySections.join(', ')}` : 'All Secs'})
                                                             </>
                                                         );
                                                     })()}
@@ -371,6 +412,52 @@ export default function CoeSchedule() {
                             </button>
                         ))}
                     </div>
+                </div>
+
+                {/* Department selection */}
+                <div className="form-group">
+                    <label className="form-label">Departments <span style={{ color: 'var(--error)' }}>*</span></label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                        <label className="checkbox-item" style={{ flex: '1 1 120px', minWidth: 120, margin: 0 }}>
+                            <input
+                                type="checkbox"
+                                checked={form.departments ? form.departments.includes('All') : true}
+                                onChange={e => {
+                                    if (e.target.checked) {
+                                        setForm({ ...form, departments: ['All'] });
+                                    } else {
+                                        setForm({ ...form, departments: [] });
+                                    }
+                                }}
+                            />
+                            <strong>All Departments</strong>
+                        </label>
+                        {departments.map(d => (
+                            <label key={d.id} className="checkbox-item" style={{ flex: '1 1 120px', minWidth: 120, margin: 0 }}>
+                                <input
+                                    type="checkbox"
+                                    checked={form.departments ? form.departments.includes(d.id) : false}
+                                    onChange={e => {
+                                        let newDepts = form.departments ? [...form.departments] : [];
+                                        if (e.target.checked) {
+                                            newDepts = newDepts.filter(x => x !== 'All');
+                                            newDepts.push(d.id);
+                                        } else {
+                                            newDepts = newDepts.filter(x => x !== d.id);
+                                        }
+                                        if (newDepts.length === 0) {
+                                            newDepts = ['All'];
+                                        }
+                                        setForm({ ...form, departments: newDepts });
+                                    }}
+                                />
+                                <span>{d.code || d.name}</span>
+                            </label>
+                        ))}
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
+                        Choose whether this block applies to all departments or specific departments
+                    </span>
                 </div>
 
                 {/* Section selection */}
@@ -515,7 +602,7 @@ export default function CoeSchedule() {
                     marginTop: 4
                 }}>
                     <strong> Block preview:</strong>&nbsp;
-                    Year {form.year} {form.sections && !form.sections.includes('All') ? `(Sec ${form.sections.join(', ')})` : '(All Sections)'} · {form.day} · Slots {Number(form.startSlotIndex) + 1}–{Number(form.endSlotIndex) + 1}&nbsp;
+                    Year {form.year} {form.departments && !form.departments.includes('All') ? `(${form.departments.map(dId => departments.find(d => d.id === dId)?.code || dId).join(', ')})` : '(All Depts)'} {form.sections && !form.sections.includes('All') ? `(Sec ${form.sections.join(', ')})` : '(All Sections)'} · {form.day} · Slots {Number(form.startSlotIndex) + 1}–{Number(form.endSlotIndex) + 1}&nbsp;
                     ({Number(form.endSlotIndex) - Number(form.startSlotIndex) + 1} slot
                     {Number(form.endSlotIndex) - Number(form.startSlotIndex) + 1 !== 1 ? 's' : ''})
                     {(() => {

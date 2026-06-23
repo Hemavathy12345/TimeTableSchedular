@@ -21,7 +21,7 @@ router.get('/', authenticateToken, async (req, res) => {
 // POST /api/coe  – create a new COE entry (admin or department_user)
 router.post('/', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
-        const { year, label, day, startSlotIndex, endSlotIndex, coFacultyId, section, sections } = req.body;
+        const { year, label, day, startSlotIndex, endSlotIndex, coFacultyId, section, sections, departments } = req.body;
 
         if (!year || !day || startSlotIndex === undefined || endSlotIndex === undefined) {
             return res.status(400).json({ error: 'year, day, startSlotIndex and endSlotIndex are required' });
@@ -47,16 +47,26 @@ router.post('/', authenticateToken, requireRole('admin', 'department_user'), asy
             targetSections = [section || 'All'];
         }
 
-        // Check for overlapping COE entries for the same year+day+sections
+        // Resolve target departments array
+        let targetDepartments = departments;
+        if (!targetDepartments || !Array.isArray(targetDepartments) || targetDepartments.length === 0) {
+            targetDepartments = ['All'];
+        }
+
+        // Check for overlapping COE entries for the same year+day+sections+departments
         const existing = await Coe.find({ year: Number(year), day }).lean();
         const overlap = existing.some(e => {
             const timeOverlap = Number(startSlotIndex) <= e.endSlotIndex && Number(endSlotIndex) >= e.startSlotIndex;
             const eSections = e.sections && e.sections.length > 0 ? e.sections : [e.section || 'All'];
             const sectionOverlap = targetSections.includes('All') || eSections.includes('All') || targetSections.some(s => eSections.includes(s));
-            return timeOverlap && sectionOverlap;
+            
+            const eDepts = e.departments && e.departments.length > 0 ? e.departments : ['All'];
+            const deptOverlap = targetDepartments.includes('All') || eDepts.includes('All') || targetDepartments.some(d => eDepts.includes(d));
+            
+            return timeOverlap && sectionOverlap && deptOverlap;
         });
         if (overlap) {
-            return res.status(409).json({ error: 'COE entry overlaps with an existing COE slot for this year/section on this day' });
+            return res.status(409).json({ error: 'COE entry overlaps with an existing COE slot for this year/section/department on this day' });
         }
 
         const entry = await Coe.create({
@@ -68,7 +78,8 @@ router.post('/', authenticateToken, requireRole('admin', 'department_user'), asy
             endSlotIndex:   Number(endSlotIndex),
             coFacultyId:    coFacultyId || null,
             section:        targetSections[0],
-            sections:       targetSections
+            sections:       targetSections,
+            departments:    targetDepartments
         });
 
         res.status(201).json(entry.toObject());
@@ -80,7 +91,7 @@ router.post('/', authenticateToken, requireRole('admin', 'department_user'), asy
 // PUT /api/coe/:id — admin or department_user can edit
 router.put('/:id', authenticateToken, requireRole('admin', 'department_user'), async (req, res) => {
     try {
-        const { label, day, startSlotIndex, endSlotIndex, coFacultyId, section, sections } = req.body;
+        const { label, day, startSlotIndex, endSlotIndex, coFacultyId, section, sections, departments } = req.body;
         const coe = await Coe.findOne({ id: req.params.id });
         if (!coe) return res.status(404).json({ error: 'COE entry not found' });
 
@@ -97,6 +108,13 @@ router.put('/:id', authenticateToken, requireRole('admin', 'department_user'), a
             }
         } else if (!Array.isArray(newSections) || newSections.length === 0) {
             newSections = [section || 'All'];
+        }
+
+        let newDepartments = departments;
+        if (newDepartments === undefined) {
+            newDepartments = coe.departments && coe.departments.length > 0 ? coe.departments : ['All'];
+        } else if (!Array.isArray(newDepartments) || newDepartments.length === 0) {
+            newDepartments = ['All'];
         }
 
         if (newStart > newEnd) {
@@ -117,7 +135,11 @@ router.put('/:id', authenticateToken, requireRole('admin', 'department_user'), a
             const timeOverlap = newStart <= e.endSlotIndex && newEnd >= e.startSlotIndex;
             const eSections = e.sections && e.sections.length > 0 ? e.sections : [e.section || 'All'];
             const sectionOverlap = newSections.includes('All') || eSections.includes('All') || newSections.some(s => eSections.includes(s));
-            return timeOverlap && sectionOverlap;
+            
+            const eDepts = e.departments && e.departments.length > 0 ? e.departments : ['All'];
+            const deptOverlap = newDepartments.includes('All') || eDepts.includes('All') || newDepartments.some(d => eDepts.includes(d));
+            
+            return timeOverlap && sectionOverlap && deptOverlap;
         });
         if (overlap) {
             return res.status(409).json({ error: 'Updated COE entry would overlap with an existing COE slot' });
@@ -128,9 +150,10 @@ router.put('/:id', authenticateToken, requireRole('admin', 'department_user'), a
         if (startSlotIndex !== undefined) coe.startSlotIndex = newStart;
         if (endSlotIndex   !== undefined) coe.endSlotIndex   = newEnd;
 
-        // Update both fields to remain in sync
+        // Update fields to remain in sync
         coe.sections = newSections;
         coe.section  = newSections[0];
+        coe.departments = newDepartments;
 
         // Allow clearing (null/'') or setting coFacultyId
         if (coFacultyId !== undefined) coe.coFacultyId = coFacultyId || null;

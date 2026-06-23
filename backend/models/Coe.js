@@ -18,6 +18,7 @@ const coeSchema = new mongoose.Schema({
     coFacultyId:    { type: String, default: null },              // optional faculty assigned to this COE block
     section:        { type: String, default: 'All' },             // 'All' or specific section (e.g. 'A') (for backward compatibility)
     sections:       { type: [String], default: ['All'] },         // list of sections (e.g. ['A', 'C'] or ['All'])
+    departments:    { type: [String], default: ['All'] },         // list of department IDs or ['All']
 }, { timestamps: true });
 
 export default mongoose.model('Coe', coeSchema);

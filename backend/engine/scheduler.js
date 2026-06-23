@@ -258,12 +258,16 @@ export function generateTimetable(data) {
     // class of that year. Slots are pre-filled BEFORE any other subject so
     // they can never be overwritten. Conflicts are reported, not auto-fixed.
     for (const coe of (coeEntries || [])) {
-        // Find all classes that belong to this year & section
+        // Find all classes that belong to this year & section & department
         const yearClasses = classes.filter(c => {
             const matchesYear = Number(c.year) === Number(coe.year);
             const sects = coe.sections && coe.sections.length > 0 ? coe.sections : [coe.section || 'All'];
             const matchesSection = sects.includes('All') || sects.includes(c.section);
-            return matchesYear && matchesSection;
+            
+            const depts = coe.departments && coe.departments.length > 0 ? coe.departments : ['All'];
+            const matchesDept = depts.includes('All') || depts.includes(c.departmentId);
+            
+            return matchesYear && matchesSection && matchesDept;
         });
         if (yearClasses.length === 0) continue;
 
